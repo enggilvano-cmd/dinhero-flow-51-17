@@ -1,0 +1,571 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Apple-Inspired Clean Design System */
+
+@layer base {
+  :root {
+    /* Financial App Color System - Tema Claro */
+    /* Cores baseadas na paleta especificada para finanças pessoais */
+    
+    /* Backgrounds - Fundo suave acinzentado */
+    --background: 210 25% 98%; /* #F7F9FB */
+    --foreground: 210 28% 13%; /* #162028 - Texto antracite */
+
+    /* Card system - Usando fundo principal */
+    --card: 210 25% 98%; /* #F7F9FB */
+    --card-foreground: 210 28% 13%; /* #162028 */
+
+    /* Popover system */
+    --popover: 210 25% 98%; /* #F7F9FB */
+    --popover-foreground: 210 28% 13%; /* #162028 */
+
+    /* Primary - Azul confiável para finanças */
+    --primary: 207 77% 40%; /* #1469B6 */
+    --primary-foreground: 210 25% 98%; /* #F7F9FB - texto claro */
+    --primary-glow: 207 77% 50%;
+    --primary-deep: 207 77% 35%;
+
+    /* Secondary - Cinza médio para elementos secundários */
+    --secondary: 210 11% 44%; /* #64707D */
+    --secondary-foreground: 210 25% 98%; /* #F7F9FB */
+
+    /* Muted tones - Tons suaves para backgrounds secundários */
+    --muted: 210 20% 95%;
+    --muted-foreground: 210 11% 44%; /* #64707D */
+
+    /* Accent/Alert - Laranja para destaques e alertas */
+    --accent: 27 74% 56%; /* #E68F36 */
+    --accent-foreground: 210 25% 98%; /* #F7F9FB */
+    --accent-glow: 27 74% 66%;
+
+    /* Status colors para finanças */
+    --success: 142 76% 36%; /* Verde para valores positivos */
+    --success-foreground: 210 25% 98%;
+    --success-glow: 142 76% 46%;
+    --warning: 27 74% 56%; /* Laranja para alertas - #E68F36 */
+    --warning-foreground: 210 25% 98%;
+    --warning-glow: 27 74% 66%;
+    --destructive: 0 84% 60%; /* Vermelho para valores negativos */
+    --destructive-foreground: 210 25% 98%;
+    --destructive-glow: 0 84% 70%;
+
+    /* Interactive elements */
+    --border: 210 15% 85%;
+    --input: 210 20% 95%;
+    --ring: 207 77% 40%; /* Primary color */
+
+    /* Financial App gradients para tema claro */
+    --gradient-primary: linear-gradient(135deg, hsl(207 77% 40%) 0%, hsl(207 77% 50%) 100%);
+    --gradient-success: linear-gradient(135deg, hsl(142 76% 36%) 0%, hsl(142 76% 46%) 100%);
+    --gradient-warning: linear-gradient(135deg, hsl(27 74% 56%) 0%, hsl(27 74% 66%) 100%);
+    --gradient-destructive: linear-gradient(135deg, hsl(0 84% 60%) 0%, hsl(0 84% 70%) 100%);
+    --gradient-card: linear-gradient(135deg, hsl(210 25% 98%) 0%, hsl(210 20% 96%) 100%);
+    --gradient-glass: linear-gradient(135deg, hsl(210 25% 98% / 0.95) 0%, hsl(210 20% 96% / 0.85) 100%);
+    --gradient-surface: linear-gradient(135deg, hsl(210 25% 98%) 0%, hsl(210 20% 96%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(210 25% 97%) 0%, hsl(210 25% 99%) 100%);
+    
+    /* Apple-style shadows - Clean and subtle */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.1), 0 2px 4px -2px hsl(0 0% 0% / 0.1);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.1), 0 4px 6px -4px hsl(0 0% 0% / 0.1);
+    --shadow-xl: 0 20px 25px -5px hsl(0 0% 0% / 0.1), 0 8px 10px -6px hsl(0 0% 0% / 0.1);
+    --shadow-card: 0 1px 3px 0 hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+    --shadow-floating: 0 4px 12px 0 hsl(0 0% 0% / 0.15);
+    --shadow-glass: 0 8px 32px 0 hsl(0 0% 0% / 0.1);
+    --shadow-inner: inset 0 1px 2px 0 hsl(0 0% 0% / 0.05);
+
+    --radius: 0.75rem;
+
+    /* Sidebar using financial palette */
+    --sidebar-background: 210 25% 98%; /* #F7F9FB */
+    --sidebar-foreground: 210 28% 13%; /* #162028 */
+    --sidebar-primary: 207 77% 40%; /* #1469B6 */
+    --sidebar-primary-foreground: 210 25% 98%; /* #F7F9FB */
+    --sidebar-accent: 210 20% 95%;
+    --sidebar-accent-foreground: 210 28% 13%; /* #162028 */
+    --sidebar-border: 210 15% 85%;
+    --sidebar-ring: 207 77% 40%; /* #1469B6 */
+  }
+
+  .dark {
+    /* Financial App Color System - Tema Escuro Completo */
+    /* Todas as áreas convertidas para tons escuros */
+    
+    /* Backgrounds - Totalmente escuro */
+    --background: 210 30% 6%; /* Fundo principal muito escuro */
+    --foreground: 210 10% 92%; /* Texto principal claro */
+
+    /* Card system - Escuro com contraste sutil */
+    --card: 210 25% 10%; /* Cards escuros */
+    --card-foreground: 210 10% 92%; /* Texto claro nos cards */
+
+    /* Popover system - Escuro */
+    --popover: 210 25% 8%; /* Popovers escuros */
+    --popover-foreground: 210 10% 92%; /* Texto claro */
+
+    /* Primary - Mantém identidade visual azul */
+    --primary: 203 87% 62%; /* Azul vibrante preservado */
+    --primary-foreground: 210 30% 6%; /* Texto escuro para contraste */
+    --primary-glow: 203 87% 72%;
+    --primary-deep: 203 87% 52%;
+
+    /* Secondary - Escuro com texto claro */
+    --secondary: 210 20% 18%; /* Fundo escuro */
+    --secondary-foreground: 210 10% 88%; /* Texto claro */
+
+    /* Muted - Tons escuros suaves */
+    --muted: 210 20% 12%; /* Fundo muted escuro */
+    --muted-foreground: 210 15% 70%; /* Texto muted claro */
+
+    /* Accent - Mantém laranja mas ajusta foreground */
+    --accent: 27 100% 68%; /* Laranja preservado */
+    --accent-foreground: 210 30% 8%; /* Texto escuro para contraste */
+    --accent-glow: 27 100% 78%;
+
+    /* Status colors - Preserva identidade mas ajusta foreground */
+    --success: 142 76% 45%; /* Verde preservado */
+    --success-foreground: 210 30% 8%; /* Texto escuro */
+    --success-glow: 142 76% 55%;
+    
+    --warning: 27 100% 68%; /* Laranja preservado */
+    --warning-foreground: 210 30% 8%; /* Texto escuro */
+    --warning-glow: 27 100% 78%;
+    
+    --destructive: 0 84% 68%; /* Vermelho preservado */
+    --destructive-foreground: 210 30% 8%; /* Texto escuro */
+    --destructive-glow: 0 84% 78%;
+
+    /* Interactive elements - Todos escuros */
+    --border: 210 15% 20%; /* Bordas escuras */
+    --input: 210 20% 10%; /* Inputs escuros */
+    --ring: 203 87% 62%; /* Anel de foco mantém primary */
+
+    /* Gradients escuros */
+    --gradient-primary: linear-gradient(135deg, hsl(203 87% 62%) 0%, hsl(203 87% 72%) 100%);
+    --gradient-glass: linear-gradient(135deg, hsl(210 25% 8% / 0.95) 0%, hsl(210 20% 10% / 0.85) 100%);
+    --gradient-surface: linear-gradient(135deg, hsl(210 30% 6%) 0%, hsl(210 25% 8%) 100%);
+    --gradient-card: linear-gradient(135deg, hsl(210 25% 10%) 0%, hsl(210 20% 12%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(210 30% 5%) 0%, hsl(210 25% 7%) 100%);
+
+    /* Sidebar completamente escuro */
+    --sidebar-background: 210 30% 6%; /* Mesmo fundo escuro */
+    --sidebar-foreground: 210 10% 92%; /* Texto claro */
+    --sidebar-primary: 203 87% 62%; /* Azul preservado */
+    --sidebar-primary-foreground: 210 30% 6%; /* Texto escuro */
+    --sidebar-accent: 210 20% 12%; /* Accent escuro */
+    --sidebar-accent-foreground: 210 10% 88%; /* Texto claro */
+    --sidebar-border: 210 15% 18%; /* Border escura */
+    --sidebar-ring: 203 87% 62%; /* Ring preserva primary */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  /* Apple-Inspired Component System - Clean & Responsive */
+  
+  /* Financial Card - Primary card style with Apple aesthetics */
+  .financial-card {
+    background: var(--gradient-card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    @apply rounded-xl sm:rounded-2xl border border-border/60 shadow-[var(--shadow-card)] p-4 sm:p-5 md:p-6;
+    position: relative;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  .financial-card:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-floating);
+    border-color: hsl(var(--border) / 0.8);
+  }
+
+  .financial-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, hsl(var(--border) / 0.5), transparent);
+    border-radius: inherit;
+  }
+  
+  /* Apple-style Interactive Card */
+  .apple-card {
+    background: var(--gradient-glass);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    @apply rounded-2xl border border-border/40 shadow-[var(--shadow-lg)] p-4 sm:p-6 md:p-8;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  .apple-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-xl);
+    border-color: hsl(var(--primary) / 0.2);
+  }
+
+  @media (min-width: 768px) {
+    .apple-card:hover {
+      transform: translateY(-3px);
+    }
+  }
+
+  /* Hero Card - Apple-inspired feature card */
+  .hero-card {
+    background: var(--gradient-hero);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    @apply rounded-2xl sm:rounded-3xl border border-border/30 shadow-[var(--shadow-xl)] p-6 sm:p-8 md:p-10;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.3), transparent);
+  }
+
+  /* Glass morphism - Apple-style */
+  .glass-morphism {
+    background: var(--gradient-glass);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    @apply border border-border/30 shadow-[var(--shadow-lg)] rounded-xl sm:rounded-2xl;
+    position: relative;
+  }
+
+  /* Apple-style Button */
+  .apple-button {
+    background: var(--gradient-primary);
+    @apply rounded-xl shadow-[var(--shadow-md)] border-0 font-medium;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  .apple-button:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .apple-button:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-sm);
+  }
+
+  @media (min-width: 768px) {
+    .apple-button:hover {
+      transform: translateY(-2px);
+    }
+  }
+
+  /* Responsive Balance Display */
+  .balance-positive {
+    @apply text-success text-lg sm:text-xl md:text-2xl;
+    text-shadow: 0 0 20px hsl(var(--success-glow) / 0.3);
+  }
+
+  .balance-negative {
+    @apply text-destructive text-lg sm:text-xl md:text-2xl;
+    text-shadow: 0 0 20px hsl(var(--destructive-glow) / 0.3);
+  }
+
+  .balance-neutral {
+    @apply text-muted-foreground text-lg sm:text-xl md:text-2xl;
+  }
+
+  /* Responsive Text Sizes */
+  .text-responsive-sm {
+    @apply text-xs sm:text-sm md:text-base;
+  }
+
+  .text-responsive-base {
+    @apply text-sm sm:text-base md:text-lg;
+  }
+
+  .text-responsive-lg {
+    @apply text-base sm:text-lg md:text-xl;
+  }
+
+  .text-responsive-xl {
+    @apply text-lg sm:text-xl md:text-2xl;
+  }
+
+  .text-responsive-2xl {
+    @apply text-xl sm:text-2xl md:text-3xl;
+  }
+
+  /* Responsive Spacing Classes */
+  .spacing-responsive-sm {
+    @apply space-y-2 sm:space-y-3 md:space-y-4;
+  }
+
+  .spacing-responsive-md {
+    @apply space-y-3 sm:space-y-4 md:space-y-6;
+  }
+
+  .spacing-responsive-lg {
+    @apply space-y-4 sm:space-y-6 md:space-y-8;
+  }
+
+  /* Apple-style Animations - Smooth & Natural */
+  .apple-entrance {
+    animation: appleEntrance 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  .apple-scale {
+    animation: appleScale 0.3s ease-out;
+  }
+
+  .apple-fade {
+    animation: appleFade 0.4s ease-out;
+  }
+
+  .apple-interaction {
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  .apple-interaction:hover {
+    transform: translateY(-1px);
+  }
+
+  .apple-interaction:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease-out;
+  }
+
+  /* Touch-friendly interactions - Respecting Apple's touch guidelines */
+  @media (hover: none) and (pointer: coarse) {
+    .apple-interaction:hover {
+      transform: none;
+    }
+    
+    .apple-card:hover {
+      transform: none;
+    }
+    
+    .apple-button:hover {
+      transform: none;
+    }
+    
+    /* Enhanced touch targets */
+    .touch-target {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+
+  /* Dynamic Background Surface */
+  .dynamic-surface {
+    background: var(--gradient-surface);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .dynamic-surface::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.1), transparent);
+    animation: shimmer 3s infinite;
+  }
+
+  /* Grid Responsive System */
+  .grid-responsive {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4;
+  }
+
+  .grid-responsive-2 {
+    @apply grid grid-cols-1 md:grid-cols-2;
+  }
+
+  .grid-responsive-3 {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3;
+  }
+
+  /* Container Responsive */
+  .container-responsive {
+    @apply w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl 2xl:max-w-4xl mx-auto;
+  }
+
+  /* Apple-style Keyframes */
+  @keyframes appleEntrance {
+    0% { 
+      opacity: 0; 
+      transform: translateY(16px) scale(0.96);
+    }
+    100% { 
+      opacity: 1; 
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes appleScale {
+    0% { 
+      transform: scale(0.95);
+    }
+    50% { 
+      transform: scale(1.02);
+    }
+    100% { 
+      transform: scale(1);
+    }
+  }
+
+  @keyframes appleFade {
+    0% { 
+      opacity: 0;
+    }
+    100% { 
+      opacity: 1;
+    }
+  }
+
+  @keyframes float {
+    0%, 100% { 
+      transform: translateY(0px);
+    }
+    50% { 
+      transform: translateY(-4px);
+    }
+  }
+
+  @keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
+  }
+
+  /* Legacy support & Additional utilities */
+  .fade-in {
+    animation: appleEntrance 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  .scale-in {
+    animation: appleScale 0.3s ease-out;
+  }
+
+  /* Financial App Typography System - Hierarquia Padrão */
+  
+  /* Títulos Principais (H1) - Saldo total, nome do app */
+  .text-financial-h1 {
+    @apply text-2xl md:text-[2rem] font-bold tracking-tight;
+    /* Mobile: 24-28px, Desktop: 28-32px */
+  }
+
+  /* Títulos de Seção (H2) - "Minhas despesas", "Relatórios" */
+  .text-financial-h2 {
+    @apply text-xl md:text-2xl font-semibold tracking-tight;
+    /* Mobile: 20-24px, Desktop: 22-26px */
+  }
+
+  /* Subtítulos/Detalhes (H3) - Mês selecionado, descrições */
+  .text-financial-h3 {
+    @apply text-lg font-medium;
+    /* Mobile/Desktop: 18-20px */
+  }
+
+  /* Valores Financeiros - Destaque especial para valores monetários */
+  .text-financial-value {
+    @apply text-xl font-bold tabular-nums;
+    /* 20px, fonte monoespaçada para números */
+  }
+
+  /* Texto Corpo - Valores, descrições, textos principais */
+  .text-financial-body {
+    @apply text-base font-normal;
+    /* Mobile/Desktop: 16-18px */
+  }
+
+  /* Texto Secundário/Legenda - Informativo, categorias, legendas */
+  .text-financial-secondary {
+    @apply text-sm md:text-base font-normal text-muted-foreground;
+    /* Mobile: 13-15px, Desktop: 14-16px */
+  }
+
+  /* Botões - Foco na legibilidade */
+  .text-financial-button {
+    @apply text-base font-medium;
+    /* 16px, sempre medium ou bold */
+  }
+
+  /* Inputs e Placeholders */
+  .text-financial-input {
+    @apply text-base font-normal;
+    /* 16px */
+  }
+
+  /* Labels de Ícones e Badges */
+  .text-financial-caption {
+    @apply text-xs md:text-sm font-normal text-muted-foreground;
+    /* Mobile/Desktop: 12-14px */
+  }
+
+  /* Classes de compatibilidade com sistema anterior */
+  .text-title-1 {
+    @apply text-financial-h1;
+  }
+
+  .text-title-2 {
+    @apply text-financial-h2;
+  }
+
+  .text-title-3 {
+    @apply text-financial-h3;
+  }
+
+  .text-headline {
+    @apply text-financial-h3;
+  }
+
+  .text-body {
+    @apply text-financial-body;
+  }
+
+  .text-caption {
+    @apply text-financial-caption;
+  }
+
+  /* Apple-style layout containers */
+  .container-apple {
+    @apply max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg xl:max-w-xl 2xl:max-w-2xl mx-auto px-4 sm:px-6;
+  }
+
+  .container-wide {
+    @apply max-w-sm sm:max-w-lg md:max-w-2xl lg:max-w-4xl xl:max-w-6xl 2xl:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* System status bar spacing (iOS) */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+}

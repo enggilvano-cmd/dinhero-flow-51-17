@@ -1,0 +1,80 @@
+// Shared types across the application
+export interface Category {
+  id: string;
+  name: string;
+  type: "income" | "expense" | "both";
+  color: string;
+  user_id?: string;
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  type: "checking" | "savings" | "credit" | "investment";
+  balance: number;
+  limit_amount?: number;
+  due_date?: number;
+  closing_date?: number;
+  color: string;
+  user_id?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreditBill {
+  id: string;
+  account_id: string;
+  billing_cycle: string;
+  due_date: Date;
+  closing_date: Date;
+  total_amount: number;
+  paid_amount: number;
+  status: "pending" | "paid" | "overdue" | "partial";
+  minimum_payment: number;
+  late_fee: number;
+  transactions: Transaction[];
+}
+
+export interface Transaction {
+  id: string;
+  description: string;
+  amount: number;
+  date: Date | string;
+  type: "income" | "expense" | "transfer";
+  category_id: string;
+  account_id: string;
+  status: "pending" | "completed";
+  user_id?: string;
+  to_account_id?: string; // For transfers
+  installments?: number; // Number of installments for installment transactions
+  current_installment?: number; // Current installment number (1-based)
+  parent_transaction_id?: string; // ID linking installment transactions together
+}
+
+export const PREDEFINED_COLORS = [
+  "#ef4444", // red
+  "#f97316", // orange  
+  "#f59e0b", // amber
+  "#eab308", // yellow
+  "#84cc16", // lime
+  "#22c55e", // green
+  "#10b981", // emerald
+  "#14b8a6", // teal
+  "#06b6d4", // cyan
+  "#0ea5e9", // sky
+  "#3b82f6", // blue
+  "#6366f1", // indigo
+  "#8b5cf6", // violet
+  "#a855f7", // purple
+  "#d946ef", // fuchsia
+  "#ec4899", // pink
+  "#f43f5e", // rose
+  "#6b7280", // gray
+];
+
+export const ACCOUNT_TYPE_LABELS = {
+  checking: "Conta Corrente",
+  savings: "Poupança", 
+  credit: "Cartão de Crédito",
+  investment: "Investimento"
+} as const;
