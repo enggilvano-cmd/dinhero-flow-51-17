@@ -145,6 +145,7 @@ export function AddTransactionModal({
       const installmentAmount = amount / installments;
       const baseDate = createDateFromString(formData.date);
       const transactions = [];
+      const parentId = crypto.randomUUID(); // Gera um ID único para o grupo de parcelas
 
       for (let i = 0; i < installments; i++) {
         const installmentDate = addMonthsToDate(baseDate, i);
@@ -164,7 +165,7 @@ export function AddTransactionModal({
           status: installmentStatus as "completed" | "pending",
           installments: installments,
           currentInstallment: i + 1,
-          parentTransactionId: null // Remove parent_transaction_id to avoid foreign key issues
+          parentTransactionId: parentId // Vincula todas as parcelas com o mesmo ID pai
         };
         
         transactions.push(transaction);

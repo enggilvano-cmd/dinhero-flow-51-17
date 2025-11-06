@@ -1,17 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { currencyStringToCents } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Account, PREDEFINED_COLORS, ACCOUNT_TYPE_LABELS } from "@/types";
 import { ColorPicker } from "@/components/forms/ColorPicker";
+import { useAccountStore } from "@/stores/AccountStore";
 
 interface EditAccountModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onEditAccount: (account: Account) => void;
+  onEditAccount: (account: Account) => Promise<void>;
   account: Account | null;
 }
 
@@ -25,15 +27,18 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
     closingDate: "",
     color: PREDEFINED_COLORS[0]
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const updateAccountInStore = useAccountStore((state) => state.updateAccount);
 
   useEffect(() => {
     if (account) {
       setFormData({
         name: account.name,
         type: account.type,
-        balance: account.balance.toString(),
-        limit: account.limit_amount?.toString() || "",
+        // Para cartões, mostra o valor da dívida como positivo na UI para consistência
+        balance: (Math.abs(account.balance) / 100).toFixed(2).replace('.', ','),
+        limit: account.limit_amount ? (account.limit_amount / 100).toFixed(2).replace('.', ',') : "",
         dueDate: account.due_date?.toString() || "",
         closingDate: account.closing_date?.toString() || "",
         color: account.color || PREDEFINED_COLORS[0]
@@ -41,7 +46,7 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
     }
   }, [account]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     
     if (!account) return;
@@ -55,8 +60,13 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
       return;
     }
 
-    const balance = parseFloat(formData.balance);
-    if (isNaN(balance)) {
+    // Se for cartão de crédito, sempre armazene o saldo como negativo (dívida).
+    const rawBalanceInCents = currencyStringToCents(formData.balance);
+    const balanceInCents = formData.type === 'credit' 
+      ? -Math.abs(rawBalanceInCents) 
+      : rawBalanceInCents;
+
+    if (isNaN(rawBalanceInCents)) {
       toast({
         title: "Erro",
         description: "Por favor, insira um valor válido para o saldo.",
@@ -65,10 +75,10 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
       return;
     }
 
-    let limit: number | undefined;
+    let limitInCents: number | undefined;
     if (formData.limit) {
-      limit = parseFloat(formData.limit);
-      if (isNaN(limit)) {
+      const parsedLimit = currencyStringToCents(formData.limit);
+      if (isNaN(parsedLimit)) {
         toast({
           title: "Erro",
           description: "Por favor, insira um valor válido para o limite.",
@@ -76,6 +86,7 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
         });
         return;
       }
+      limitInCents = parsedLimit;
     }
 
     let dueDate: number | undefined;
@@ -109,22 +120,32 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
       user_id: account.user_id,
       name: formData.name.trim(),
       type: formData.type,
-      balance: balance,
-      limit_amount: limit,
+      balance: balanceInCents,
+      limit_amount: limitInCents,
       due_date: dueDate,
       closing_date: closingDate,
       color: formData.color
     };
 
-    onEditAccount(updatedAccount);
+    setIsSubmitting(true);
+    try {
+      await onEditAccount(updatedAccount);
 
-    toast({
-      title: "Sucesso",
-      description: "Conta atualizada com sucesso!",
-      variant: "default"
-    });
-    
-    onOpenChange(false);
+      // Atualiza a conta no store global
+      updateAccountInStore(updatedAccount);
+
+      toast({
+        title: "Sucesso",
+        description: "Conta atualizada com sucesso!",
+        variant: "default"
+      });
+    } catch (error) {
+      console.error("Failed to edit account:", error);
+      // O toast de erro deve ser tratado dentro do onEditAccount ou aqui
+    } finally {
+      setIsSubmitting(false);
+      onOpenChange(false);
+    }
   };
 
   const handleColorChange = (color: string) => {
@@ -167,11 +188,11 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
 
           <div className="space-y-2">
             <Label htmlFor="balance" className="text-financial-secondary font-medium">
-              {formData.type === "credit" ? "Saldo Atual" : formData.type === "investment" ? "Valor Aplicado" : "Saldo"}
+              {formData.type === "credit" ? "Saldo Devedor Atual" : formData.type === "investment" ? "Valor Aplicado" : "Saldo"}
             </Label>
             <Input
               id="balance"
-              type="number"
+              type="text"
               step="0.01"
               placeholder="0,00"
               value={formData.balance}
@@ -180,7 +201,7 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
             />
             <p className="text-financial-caption">
               {formData.type === "credit" 
-                ? "Para cartão de crédito, use valores negativos para dívidas"
+                ? "Insira o valor total que você deve no cartão neste momento (faturas abertas + fechadas não pagas)."
                 : formData.type === "investment"
                 ? "Valor total aplicado no investimento"
                 : "Saldo atual da conta"
@@ -192,7 +213,7 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
             <Label htmlFor="limit" className="text-financial-secondary font-medium">Limite da Conta (opcional)</Label>
             <Input
               id="limit"
-              type="number"
+              type="text"
               step="0.01"
               placeholder="0,00"
               value={formData.limit}
@@ -263,8 +284,9 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
             <Button 
               type="submit" 
               className="flex-1 text-financial-button bg-primary hover:bg-primary/90 text-primary-foreground touch-target"
+              disabled={isSubmitting}
             >
-              Salvar Alterações
+              {isSubmitting ? "Salvando..." : "Salvar Alterações"}
             </Button>
           </div>
         </form>

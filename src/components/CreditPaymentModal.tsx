@@ -1,19 +1,22 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { currencyStringToCents } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Account } from "@/types";
 import { createDateFromString, getTodayString } from "@/lib/dateUtils";
+import { formatCurrency, getAvailableBalance } from "@/lib/formatters";
+import { AccountBalanceDetails } from "./AccountBalanceDetails";
+import { useAccountStore } from "@/stores/AccountStore";
 
 interface CreditPaymentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onPayment: (creditAccountId: string, bankAccountId: string, amount: number, date: Date) => void;
-  accounts: Account[];
+  onPayment: (creditAccountId: string, bankAccountId: string, amountInCents: number, date: Date) => Promise<{ creditAccount: Account, bankAccount: Account }>;
   creditAccount: Account | null;
 }
 
@@ -21,7 +24,6 @@ export function CreditPaymentModal({
   open, 
   onOpenChange, 
   onPayment, 
-  accounts, 
   creditAccount 
 }: CreditPaymentModalProps) {
   const [formData, setFormData] = useState({
@@ -30,14 +32,16 @@ export function CreditPaymentModal({
     paymentType: "total" as "total" | "partial",
     date: getTodayString()
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const accounts = useAccountStore((state) => state.accounts);
+  const updateAccountsInStore = useAccountStore((state) => state.updateAccounts);
 
   // Only bank accounts can pay credit cards
-  const bankAccounts = accounts.filter(acc => acc.type !== "credit");
+  const bankAccounts = useMemo(() => accounts.filter(acc => acc.type !== "credit"), [accounts]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!creditAccount || !formData.bankAccountId || !formData.amount) {
       toast({
         title: "Erro",
@@ -47,8 +51,9 @@ export function CreditPaymentModal({
       return;
     }
 
-    const amount = parseFloat(formData.amount);
-    if (isNaN(amount) || amount <= 0) {
+    // Validação e conversão para centavos
+    const amountInCents = currencyStringToCents(formData.amount);
+    if (isNaN(amountInCents) || amountInCents <= 0) {
       toast({
         title: "Erro",
         description: "Por favor, insira um valor válido maior que zero.",
@@ -58,12 +63,14 @@ export function CreditPaymentModal({
     }
 
     // Check if bank account has sufficient balance or overdraft limit
+    // Frontend validation for UX. The backend should always re-validate this rule
+    // to ensure data integrity and prevent unauthorized transactions.
     const bankAccount = accounts.find(acc => acc.id === formData.bankAccountId);
     if (bankAccount) {
-      const availableBalance = bankAccount.balance + (bankAccount.limit_amount || 0);
-      if (availableBalance < amount) {
+      const availableBalanceInCents = getAvailableBalance(bankAccount);
+      if (availableBalanceInCents < amountInCents) {
         const limitText = bankAccount.limit_amount 
-          ? ` (incluindo limite de R$ ${bankAccount.limit_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`
+          ? ` (incluindo limite de ${formatCurrency(bankAccount.limit_amount)})`
           : '';
         toast({
           title: "Saldo Insuficiente",
@@ -75,43 +82,45 @@ export function CreditPaymentModal({
     }
 
     // Check if payment amount is not greater than credit balance (debt)
-    const creditBalance = Math.abs(creditAccount.balance);
-    if (amount > creditBalance) {
+    const creditDebtInCents = Math.abs(creditAccount.balance);
+    if (amountInCents > creditDebtInCents && formData.paymentType !== 'total') {
       toast({
         title: "Valor Inválido",
-        description: `O valor do pagamento não pode ser maior que a dívida de ${formatCurrency(creditBalance)}.`,
+        description: `O valor do pagamento não pode ser maior que a dívida de ${formatCurrency(creditDebtInCents)}.`,
         variant: "destructive"
       });
       return;
     }
 
-    onPayment(
-      creditAccount.id,
-      formData.bankAccountId,
-      amount,
-      createDateFromString(formData.date)
-    );
+    setIsSubmitting(true);
+    try {
+      const { creditAccount: updatedCreditAccount, bankAccount: updatedBankAccount } = await onPayment(
+        // A lógica de pagamento de fatura deve ser tratada no backend como duas transações:
+        // 1. Uma despesa na conta de origem (bankAccountId)
+        // 2. Uma receita (amortização de dívida) na conta de destino (creditAccountId)
+        // Esta chamada única assume que o backend abstrai essa complexidade.
+        creditAccount.id,
+        formData.bankAccountId,
+        amountInCents,
+        createDateFromString(formData.date)
+      );
 
-    // Reset form
-    setFormData({
-      bankAccountId: "",
-      amount: "",
-      paymentType: "total",
-      date: getTodayString()
-    });
-  };
+      // Atualiza as contas no store global
+      updateAccountsInStore([updatedCreditAccount, updatedBankAccount]);
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
-  };
-
-  const getAvailableBalance = (accountId: string) => {
-    const account = accounts.find(acc => acc.id === accountId);
-    if (!account) return 0;
-    return account.balance + (account.limit_amount || 0);
+      // Reset form
+      setFormData({
+        bankAccountId: "",
+        amount: "",
+        paymentType: "total",
+        date: getTodayString()
+      });
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Payment failed:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handlePaymentTypeChange = (type: "total" | "partial") => {
@@ -119,7 +128,7 @@ export function CreditPaymentModal({
       ...prev,
       paymentType: type,
       amount: type === "total" && creditAccount 
-        ? Math.abs(creditAccount.balance).toString() 
+        ? (Math.abs(creditAccount.balance) / 100).toFixed(2).replace('.', ',')
         : ""
     }));
   };
@@ -172,16 +181,7 @@ export function CreditPaymentModal({
                 </SelectContent>
             </Select>
             {formData.bankAccountId && (
-              <p className="text-sm text-muted-foreground">
-                Saldo disponível: {formatCurrency(getAvailableBalance(formData.bankAccountId))}
-                {(() => {
-                  const account = accounts.find(acc => acc.id === formData.bankAccountId);
-                  return account && account.limit_amount && account.limit_amount > 0 ? 
-                    <span className="block text-xs text-blue-600">
-                      (Saldo: {formatCurrency(account.balance)} + Limite: {formatCurrency(account.limit_amount)})
-                    </span> : null;
-                })()}
-              </p>
+              <AccountBalanceDetails account={accounts.find(acc => acc.id === formData.bankAccountId)} />
             )}
           </div>
 
@@ -218,7 +218,7 @@ export function CreditPaymentModal({
               <Label htmlFor="amount">Valor do Pagamento (R$)</Label>
               <Input
                 id="amount"
-                type="number"
+                type="text"
                 step="0.01"
                 placeholder="0,00"
                 value={formData.amount}
@@ -254,9 +254,9 @@ export function CreditPaymentModal({
             <Button 
               type="submit" 
               className="flex-1"
-              disabled={bankAccounts.length === 0}
+              disabled={bankAccounts.length === 0 || isSubmitting}
             >
-              Realizar Pagamento
+              {isSubmitting ? "Realizando..." : "Realizar Pagamento"}
             </Button>
           </div>
         </form>

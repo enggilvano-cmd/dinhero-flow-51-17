@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
-export type EditScope = "current" | "current-and-previous" | "current-and-remaining" | "all";
+export type EditScope = "current" | "current-and-remaining" | "all";
 
 interface InstallmentEditScopeDialogProps {
   open: boolean;
@@ -47,21 +47,6 @@ export function InstallmentEditScopeDialog({
               </div>
             </div>
           </Button>
-
-          {currentInstallment > 1 && (
-            <Button 
-              variant="outline" 
-              className="w-full justify-start h-auto p-4"
-              onClick={() => handleScopeSelection("current-and-previous")}
-            >
-              <div className="text-left">
-                <div className="font-medium">Esta parcela e as anteriores</div>
-                <div className="text-sm text-muted-foreground">
-                  Editar as parcelas 1 até {currentInstallment} (já processadas)
-                </div>
-              </div>
-            </Button>
-          )}
 
           {currentInstallment < totalInstallments && (
             <Button 
