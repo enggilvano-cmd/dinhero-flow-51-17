@@ -114,10 +114,10 @@ export default function SystemSettings() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Settings className="h-6 w-6" />
-        <h1 className="text-2xl font-bold">Configurações do Sistema</h1>
+    <div className="space-y-8">
+      <div className="space-y-2">
+        <h1 className="text-2xl font-bold sm:text-3xl">Configurações do Sistema</h1>
+        <p className="text-muted-foreground">Ajustes globais que afetam todos os usuários.</p>
       </div>
 
       <Alert>

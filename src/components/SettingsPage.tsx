@@ -233,15 +233,14 @@ export function SettingsPage({ settings, onUpdateSettings, onClearAllData }: Set
 
   return (
     <div className="space-y-8 fade-in">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">Configurações</h1>
+      <div className="space-y-2">
+        <h1 className="text-2xl font-bold sm:text-3xl">Configurações</h1>
         <p className="text-muted-foreground">
           Personalize seu aplicativo e gerencie seus dados
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* General Settings */}
         <Card className="financial-card">
           <CardHeader>
@@ -250,7 +249,7 @@ export function SettingsPage({ settings, onUpdateSettings, onClearAllData }: Set
               Configurações Gerais
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="currency">Moeda</Label>
               <Select 
@@ -308,7 +307,7 @@ export function SettingsPage({ settings, onUpdateSettings, onClearAllData }: Set
           </CardContent>
         </Card>
 
-        {/* Notifications */}
+        {/* Data Management */}
         <Card className="financial-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -316,7 +315,7 @@ export function SettingsPage({ settings, onUpdateSettings, onClearAllData }: Set
               Notificações
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <Label>Notificações do Sistema</Label>
@@ -352,7 +351,7 @@ export function SettingsPage({ settings, onUpdateSettings, onClearAllData }: Set
           </CardContent>
         </Card>
 
-        {/* Data Management */}
+        {/* About */}
         <Card className="financial-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -360,7 +359,7 @@ export function SettingsPage({ settings, onUpdateSettings, onClearAllData }: Set
               Gerenciamento de Dados
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
             <div className="space-y-3">
               <h4 className="font-medium">Backup e Restauração</h4>
               <div className="grid grid-cols-1 gap-3">
@@ -416,15 +415,15 @@ export function SettingsPage({ settings, onUpdateSettings, onClearAllData }: Set
           </CardContent>
         </Card>
 
-        {/* About */}
-        <Card className="financial-card">
+        {/* Danger Zone */}
+        <Card className="financial-card md:col-span-2 lg:col-span-3">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
               Sobre o Aplicativo
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
             <div>
               <h4 className="font-medium">PlaniFlow</h4>
               <p className="text-sm text-muted-foreground">Versão 1.0.0</p>

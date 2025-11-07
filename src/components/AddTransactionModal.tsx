@@ -241,7 +241,7 @@ export function AddTransactionModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Adicionar Nova Transação</DialogTitle>
         </DialogHeader>
@@ -260,13 +260,13 @@ export function AddTransactionModal({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="type">Tipo</Label>
-              <Select value={formData.type} onValueChange={(value) => setFormData(prev => ({ ...prev, type: value as any }))}>
+              <Select value={formData.type} onValueChange={(value) => setFormData(prev => ({ ...prev, type: value as any, category_id: "" }))}>
                 <SelectTrigger>
                   <SelectValue placeholder="Tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                <SelectItem value="income">Receita</SelectItem>
-                <SelectItem value="expense">Despesa</SelectItem>
+                  <SelectItem value="income">Receita</SelectItem>
+                  <SelectItem value="expense">Despesa</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -330,21 +330,21 @@ export function AddTransactionModal({
               <Label htmlFor="account_id">Conta</Label>
               <Select value={formData.account_id} onValueChange={(value) => setFormData(prev => ({ ...prev, account_id: value }))}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione a conta" />
+                  <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
-                  <SelectContent>
-                    {accounts.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3 rounded-full" 
-                            style={{ backgroundColor: account.color || "#6b7280" }}
-                          />
-                          {account.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+                <SelectContent>
+                  {accounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: account.color || "#6b7280" }}
+                        />
+                        {account.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
 

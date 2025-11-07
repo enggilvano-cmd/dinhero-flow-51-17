@@ -150,43 +150,43 @@ export function AddAccountModal({ open, onOpenChange, onAddAccount }: AddAccount
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-md sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader className="pb-4">
           <DialogTitle className="text-lg sm:text-xl">Adicionar Nova Conta</DialogTitle>
         </DialogHeader>
         
-        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* Nome da Conta */}
           <div className="space-y-2">
-            <Label htmlFor="name" className="text-sm font-medium">Nome da Conta</Label>
+            <Label htmlFor="name" className="text-sm">Nome da Conta</Label>
             <Input
               id="name"
               placeholder="Ex: Banco do Brasil - Conta Corrente"
               value={formData.name}
               onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              className="h-10 sm:h-11"
+              className="h-10 sm:h-11 text-sm"
             />
           </div>
 
           {/* Tipo de Conta */}
           <div className="space-y-2">
-            <Label htmlFor="type" className="text-sm font-medium">Tipo de Conta</Label>
+            <Label htmlFor="type" className="text-sm">Tipo de Conta</Label>
             <Select value={formData.type} onValueChange={(value) => setFormData(prev => ({ ...prev, type: value as any }))}>
-              <SelectTrigger className="h-10 sm:h-11">
+              <SelectTrigger className="h-10 sm:h-11 text-sm">
                 <SelectValue placeholder="Selecione o tipo de conta" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="checking">{ACCOUNT_TYPE_LABELS.checking}</SelectItem>
-                <SelectItem value="savings">{ACCOUNT_TYPE_LABELS.savings}</SelectItem>
-                <SelectItem value="credit">{ACCOUNT_TYPE_LABELS.credit}</SelectItem>
-                <SelectItem value="investment">{ACCOUNT_TYPE_LABELS.investment}</SelectItem>
+                <SelectItem value="checking" className="text-sm">{ACCOUNT_TYPE_LABELS.checking}</SelectItem>
+                <SelectItem value="savings" className="text-sm">{ACCOUNT_TYPE_LABELS.savings}</SelectItem>
+                <SelectItem value="credit" className="text-sm">{ACCOUNT_TYPE_LABELS.credit}</SelectItem>
+                <SelectItem value="investment" className="text-sm">{ACCOUNT_TYPE_LABELS.investment}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {/* Saldo/Valor */}
           <div className="space-y-2">
-            <Label htmlFor="balance" className="text-sm font-medium">
+            <Label htmlFor="balance" className="text-sm">
           {formData.type === "credit" ? "Saldo Devedor Atual" : formData.type === "investment" ? "Valor Aplicado" : "Saldo Inicial"}
             </Label>
             <Input
@@ -196,9 +196,9 @@ export function AddAccountModal({ open, onOpenChange, onAddAccount }: AddAccount
               placeholder="0,00"
               value={formData.balance}
               onChange={(e) => setFormData(prev => ({ ...prev, balance: e.target.value }))}
-              className="h-10 sm:h-11"
+              className="h-10 sm:h-11 text-sm"
             />
-            <p className="text-xs sm:text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {formData.type === "credit" 
             ? "Insira o valor total que você deve no cartão neste momento (faturas abertas + fechadas não pagas)."
                 : formData.type === "investment"
@@ -210,7 +210,7 @@ export function AddAccountModal({ open, onOpenChange, onAddAccount }: AddAccount
 
           {/* Limite da Conta */}
           <div className="space-y-2">
-            <Label htmlFor="limit" className="text-sm font-medium">Limite da Conta (opcional)</Label>
+            <Label htmlFor="limit" className="text-sm">Limite da Conta (opcional)</Label>
             <Input
               id="limit"
               type="text"
@@ -218,18 +218,18 @@ export function AddAccountModal({ open, onOpenChange, onAddAccount }: AddAccount
               placeholder="0,00"
               value={formData.limit}
               onChange={(e) => setFormData(prev => ({ ...prev, limit: e.target.value }))}
-              className="h-10 sm:h-11"
+              className="h-10 sm:h-11 text-sm"
             />
-            <p className="text-xs sm:text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Defina um limite opcional para esta conta. Útil para controlar teto de gastos.
             </p>
           </div>
 
           {/* Campos específicos para Cartão de Crédito */}
           {formData.type === "credit" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="closingDate" className="text-sm font-medium">Dia do Fechamento (opcional)</Label>
+                <Label htmlFor="closingDate" className="text-sm">Dia do Fechamento (opcional)</Label>
                 <Input
                   id="closingDate"
                   type="number"
@@ -238,7 +238,7 @@ export function AddAccountModal({ open, onOpenChange, onAddAccount }: AddAccount
                   placeholder="Ex: 5"
                   value={formData.closingDate}
                   onChange={(e) => setFormData(prev => ({ ...prev, closingDate: e.target.value }))}
-                  className="h-10 sm:h-11"
+                  className="h-10 sm:h-11 text-sm"
                 />
                 <p className="text-xs text-muted-foreground">
                   Dia do mês em que a fatura fecha
@@ -246,7 +246,7 @@ export function AddAccountModal({ open, onOpenChange, onAddAccount }: AddAccount
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="dueDate" className="text-sm font-medium">Dia do Vencimento (opcional)</Label>
+                <Label htmlFor="dueDate" className="text-sm">Dia do Vencimento (opcional)</Label>
                 <Input
                   id="dueDate"
                   type="number"
@@ -255,7 +255,7 @@ export function AddAccountModal({ open, onOpenChange, onAddAccount }: AddAccount
                   placeholder="Ex: 15"
                   value={formData.dueDate}
                   onChange={(e) => setFormData(prev => ({ ...prev, dueDate: e.target.value }))}
-                  className="h-10 sm:h-11"
+                  className="h-10 sm:h-11 text-sm"
                 />
                 <p className="text-xs text-muted-foreground">
                   Dia do mês em que a fatura vence
@@ -272,18 +272,18 @@ export function AddAccountModal({ open, onOpenChange, onAddAccount }: AddAccount
           />
 
           {/* Botões de Ação */}
-          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
+          <div className="flex gap-3 pt-4 border-t">
             <Button 
               type="button" 
               variant="outline" 
               onClick={() => onOpenChange(false)} 
-              className="flex-1 h-10 sm:h-11"
+              className="flex-1 h-10 sm:h-11 text-sm"
             >
               Cancelar
             </Button>
             <Button 
               type="submit" 
-              className="flex-1 h-10 sm:h-11"
+              className="flex-1 h-10 sm:h-11 text-sm"
               disabled={isSubmitting}
             >
               {isSubmitting ? "Adicionando..." : "Adicionar Conta"}

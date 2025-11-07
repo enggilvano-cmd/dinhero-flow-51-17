@@ -154,7 +154,7 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-[425px] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+      <DialogContent className="w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader className="space-y-2 pb-4">
           <DialogTitle className="text-financial-h3">Editar Conta</DialogTitle>
         </DialogHeader>
@@ -167,7 +167,7 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
               placeholder="Ex: Banco do Brasil - Conta Corrente"
               value={formData.name}
               onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              className="text-financial-input"
+              className="h-10 sm:h-11 text-sm"
             />
           </div>
 
@@ -175,7 +175,7 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
             <Label htmlFor="type" className="text-financial-secondary font-medium">Tipo de Conta</Label>
             <Select value={formData.type} onValueChange={(value) => setFormData(prev => ({ ...prev, type: value as any }))}>
               <SelectTrigger className="text-financial-input">
-                <SelectValue placeholder="Selecione o tipo de conta" />
+                <SelectValue placeholder="Selecione o tipo de conta" className="text-sm"/>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="checking">{ACCOUNT_TYPE_LABELS.checking}</SelectItem>
@@ -197,7 +197,7 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
               placeholder="0,00"
               value={formData.balance}
               onChange={(e) => setFormData(prev => ({ ...prev, balance: e.target.value }))}
-              className="text-financial-input"
+              className="h-10 sm:h-11 text-sm"
             />
             <p className="text-financial-caption">
               {formData.type === "credit" 
@@ -218,7 +218,7 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
               placeholder="0,00"
               value={formData.limit}
               onChange={(e) => setFormData(prev => ({ ...prev, limit: e.target.value }))}
-              className="text-financial-input"
+              className="h-10 sm:h-11 text-sm"
             />
             <p className="text-financial-caption">
               Defina um limite opcional para esta conta. Útil para controlar teto de gastos.
@@ -240,7 +240,7 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
                     placeholder="Ex: 5"
                     value={formData.closingDate}
                     onChange={(e) => setFormData(prev => ({ ...prev, closingDate: e.target.value }))}
-                    className="text-financial-input"
+                    className="h-10 sm:h-11 text-sm"
                   />
                   <p className="text-financial-caption">
                     Dia do fechamento
@@ -257,7 +257,7 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
                     placeholder="Ex: 15"
                     value={formData.dueDate}
                     onChange={(e) => setFormData(prev => ({ ...prev, dueDate: e.target.value }))}
-                    className="text-financial-input"
+                    className="h-10 sm:h-11 text-sm"
                   />
                   <p className="text-financial-caption">
                     Dia do vencimento
@@ -272,18 +272,18 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
             onChange={handleColorChange}
           />
 
-          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-border/50">
+          <div className="flex gap-3 pt-4 border-t border-border/50">
             <Button 
               type="button" 
               variant="outline" 
               onClick={() => onOpenChange(false)} 
-              className="flex-1 text-financial-button touch-target"
+              className="flex-1 text-sm"
             >
               Cancelar
             </Button>
             <Button 
               type="submit" 
-              className="flex-1 text-financial-button bg-primary hover:bg-primary/90 text-primary-foreground touch-target"
+              className="flex-1 text-sm"
               disabled={isSubmitting}
             >
               {isSubmitting ? "Salvando..." : "Salvar Alterações"}

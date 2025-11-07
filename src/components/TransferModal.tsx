@@ -134,7 +134,7 @@ export function TransferModal({ open, onOpenChange, onTransfer }: TransferModalP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Nova Transferência</DialogTitle>
         </DialogHeader>

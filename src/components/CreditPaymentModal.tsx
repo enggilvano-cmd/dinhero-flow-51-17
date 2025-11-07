@@ -152,7 +152,7 @@ export function CreditPaymentModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Pagamento de Fatura</DialogTitle>
           <DialogDescription>
@@ -224,7 +224,7 @@ export function CreditPaymentModal({
                 type="button"
                 variant={formData.paymentType === "invoice" ? "default" : "outline"}
                 onClick={() => handlePaymentTypeChange("invoice")}
-                className="h-auto p-2 flex-col"
+                className="h-auto p-2 flex-col text-xs"
                 disabled={invoiceValueInCents <= 0}
               >
                 <span className="font-medium text-xs">Pagar Fatura</span>
@@ -236,7 +236,7 @@ export function CreditPaymentModal({
                 type="button"
                 variant={formData.paymentType === "total_balance" ? "default" : "outline"}
                 onClick={() => handlePaymentTypeChange("total_balance")}
-                className="h-auto p-2 flex-col"
+                className="h-auto p-2 flex-col text-xs"
                 disabled={totalDebtInCents <= 0}
               >
                 <span className="font-medium text-xs">Pagar Total</span>
@@ -248,7 +248,7 @@ export function CreditPaymentModal({
                 type="button"
                 variant={formData.paymentType === "partial" ? "default" : "outline"}
                 onClick={() => handlePaymentTypeChange("partial")}
-                className="h-auto p-2 flex-col"
+                className="h-auto p-2 flex-col text-xs"
               >
                 <span className="font-medium text-xs">Outro Valor</span>
                 <span className="text-xs text-muted-foreground">
