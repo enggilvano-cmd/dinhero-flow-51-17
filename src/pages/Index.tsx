@@ -24,6 +24,33 @@ import { supabase } from "@/integrations/supabase/client";
 import { MigrationWarning } from "@/components/MigrationWarning";
 import { createDateFromString } from "@/lib/dateUtils";
 
+// Funções utilitárias para conversão entre camelCase e snake_case
+const toSnakeCase = (obj: any) => {
+  if (Array.isArray(obj)) {
+    return obj.map(toSnakeCase);
+  } else if (obj !== null && typeof obj === 'object') {
+    return Object.keys(obj).reduce((acc, key) => {
+      const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+      acc[snakeKey] = toSnakeCase(obj[key]);
+      return acc;
+    }, {});
+  }
+  return obj;
+};
+
+const toCamelCase = (obj: any) => {
+  if (Array.isArray(obj)) {
+    return obj.map(toCamelCase);
+  } else if (obj !== null && typeof obj === 'object') {
+    return Object.keys(obj).reduce((acc, key) => {
+      const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      acc[camelKey] = toCamelCase(obj[key]);
+      return acc;
+    }, {});
+  }
+  return obj;
+};
+
 const PlaniFlowApp = () => {
   const { settings, updateSettings } = useSettings();
   const { user, loading, isAdmin } = useAuth();
@@ -65,33 +92,29 @@ const PlaniFlowApp = () => {
   // Load data from Supabase
   useEffect(() => {
     if (!user) return;
-    
+
     const loadData = async () => {
       try {
         setLoadingData(true);
         console.log('Loading accounts and transactions from Supabase...');
-        
+
         // Load accounts
         const { data: accountsData, error: accountsError } = await supabase
           .from('accounts')
-          .select('*')
+          .select('id, name, type, balance, limit_amount, due_date, closing_date') // Selecionar apenas os campos necessários
           .eq('user_id', user.id)
           .order('created_at', { ascending: false });
 
         if (accountsError) {
           console.error('Error loading accounts:', accountsError);
+          toast({ title: 'Erro ao carregar contas', description: accountsError.message, variant: 'destructive' });
         } else {
-          const mappedAccounts = accountsData || [];
-          
-          // Mapear os dados do Supabase para o formato esperado pelos componentes
-          const formattedAccounts = mappedAccounts.map(acc => ({
+          const formattedAccounts = (accountsData || []).map(acc => ({
             ...acc,
-            // Mapear campos do Supabase para o formato esperado
             limit: acc.limit_amount,
             dueDate: acc.due_date,
             closingDate: acc.closing_date
           }));
-          
           console.log('Loaded accounts:', formattedAccounts.length);
           setAccounts(formattedAccounts);
         }
@@ -99,11 +122,12 @@ const PlaniFlowApp = () => {
         // Load categories
         const { data: categoriesData, error: categoriesError } = await supabase
           .from('categories')
-          .select('*')
+          .select('id, name, type, color') // Selecionar apenas os campos necessários
           .eq('user_id', user.id);
 
         if (categoriesError) {
           console.error('Error loading categories:', categoriesError);
+          toast({ title: 'Erro ao carregar categorias', description: categoriesError.message, variant: 'destructive' });
         } else {
           console.log('Loaded categories:', categoriesData?.length);
           setCategories(categoriesData || []);
@@ -112,33 +136,25 @@ const PlaniFlowApp = () => {
         // Load transactions
         const { data: transactionsData, error: transactionsError } = await supabase
           .from('transactions')
-          .select('*')
+          .select('id, description, amount, date, type, category_id, account_id, status') // Selecionar apenas os campos necessários
           .eq('user_id', user.id)
           .order('created_at', { ascending: false });
 
         if (transactionsError) {
           console.error('Error loading transactions:', transactionsError);
+          toast({ title: 'Erro ao carregar transações', description: transactionsError.message, variant: 'destructive' });
         } else {
-          const mappedTransactions = transactionsData || [];
-          
-          // Mapear os dados do Supabase para o formato esperado pelos componentes
-          const formattedTransactions = mappedTransactions.map(trans => ({
+          const formattedTransactions = (transactionsData || []).map(trans => ({
             ...trans,
-            // Mapear campos do Supabase para o formato esperado
             accountId: trans.account_id,
-            category: trans.category_id,
-            currentInstallment: trans.current_installment,
-            parentTransactionId: trans.parent_transaction_id,
-            toAccountId: trans.to_account_id,
-            // Garantir que date seja Date object usando createDateFromString para evitar problemas de fuso horário
-            date: createDateFromString(trans.date)
+            categoryId: trans.category_id
           }));
-          
           console.log('Loaded transactions:', formattedTransactions.length);
           setTransactions(formattedTransactions);
         }
       } catch (error) {
         console.error('Error loading data:', error);
+        toast({ title: 'Erro ao carregar dados', description: error.message, variant: 'destructive' });
       } finally {
         setLoadingData(false);
       }
@@ -154,21 +170,10 @@ const PlaniFlowApp = () => {
     if (!user) return;
     
     try {
-      // Map incoming data (supports camelCase from UI and snake_case) to snake_case for Supabase
-      const limitValue = accountData.limit ?? accountData.limit_amount;
-      const dueDateValue = accountData.dueDate ?? accountData.due_date;
-      const closingDateValue = accountData.closingDate ?? accountData.closing_date;
-
-      const mappedData = {
-        name: accountData.name,
-        type: accountData.type,
-        balance: accountData.balance,
-        color: accountData.color,
-        user_id: user.id,
-        ...(limitValue !== undefined && { limit_amount: limitValue }),
-        ...(dueDateValue !== undefined && { due_date: dueDateValue }),
-        ...(closingDateValue !== undefined && { closing_date: closingDateValue })
-      };
+      const mappedData = toSnakeCase({
+        ...accountData,
+        userId: user.id
+      });
 
       const { data, error } = await supabase
         .from('accounts')
@@ -178,10 +183,14 @@ const PlaniFlowApp = () => {
 
       if (error) {
         console.error('Error adding account:', error);
-        return;
+        toast({
+          title: "Erro",
+          description: "Erro ao adicionar conta. Tente novamente.",
+          variant: "destructive"
+        });
       }
 
-      setAccounts(prev => [...prev, data]);
+      setAccounts(prev => [...prev, toCamelCase(data)]);
     } catch (error) {
       console.error('Error adding account:', error);
     }
@@ -199,7 +208,11 @@ const PlaniFlowApp = () => {
 
       if (error) {
         console.error('Error updating account:', error);
-        return;
+        toast({
+          title: "Erro",
+          description: "Erro ao atualizar conta. Tente novamente.",
+          variant: "destructive"
+        });
       }
 
       setAccounts(prev => prev.map(acc => 
@@ -223,7 +236,11 @@ const PlaniFlowApp = () => {
 
       if (error) {
         console.error('Error deleting account:', error);
-        return;
+        toast({
+          title: "Erro",
+          description: "Erro ao excluir conta. Tente novamente.",
+          variant: "destructive"
+        });
       }
 
       setAccounts(prev => prev.filter(acc => acc.id !== accountId));
@@ -237,17 +254,10 @@ const PlaniFlowApp = () => {
     if (!user) return;
     
     try {
-      // Map camelCase properties to snake_case for Supabase
-      const mappedData = {
-        description: transactionData.description,
-        amount: transactionData.amount,
-        date: transactionData.date.toISOString().split('T')[0], // Convert to YYYY-MM-DD format
-        type: transactionData.type,
-        account_id: transactionData.accountId,
-        category_id: transactionData.category,
-        status: transactionData.status,
-        user_id: user.id
-      };
+      const mappedData = toSnakeCase({
+        ...transactionData,
+        userId: user.id
+      });
 
       const { data, error } = await supabase
         .from('transactions')
@@ -257,18 +267,21 @@ const PlaniFlowApp = () => {
 
       if (error) {
         console.error('Error adding transaction:', error);
-        return;
+        toast({
+          title: "Erro",
+          description: "Erro ao adicionar transação. Tente novamente.",
+          variant: "destructive"
+        });
       }
 
-      setTransactions(prev => [...prev, data]);
+      setTransactions(prev => [...prev, toCamelCase(data)]);
 
-      // Update account balance
-      const balanceChange = transactionData.type === "income" 
-        ? transactionData.amount 
+      // Update account balance (transactionData.amount já está em centavos)
+      const balanceChange = transactionData.type === "income"
+        ? transactionData.amount
         : -transactionData.amount;
-      
       // Get current account balance and validate transaction
-      const account = accounts.find(acc => acc.id === transactionData.accountId);
+      const account = accounts.find(acc => acc.id === transactionData.account_id);
       if (account) {
         const newBalance = account.balance + balanceChange;
         
@@ -282,17 +295,16 @@ const PlaniFlowApp = () => {
         await supabase
           .from('accounts')
           .update({ balance: newBalance })
-          .eq('id', transactionData.accountId)
+          .eq('id', transactionData.account_id)
           .eq('user_id', user.id);
       }
-
-      // Update local state
-      setAccounts(prev => prev.map(account => {
-        if (account.id === transactionData.accountId) {
-          return { ...account, balance: account.balance + balanceChange };
-        }
-        return account;
-      }));
+      
+      // Atualiza o estado local das contas
+      setAccounts(prevAccounts => prevAccounts.map(acc => 
+        acc.id === transactionData.account_id 
+          ? { ...acc, balance: acc.balance + balanceChange } 
+          : acc
+      ));
     } catch (error) {
       console.error('Error adding transaction:', error);
       if (error instanceof Error) {
@@ -484,14 +496,14 @@ const PlaniFlowApp = () => {
     }
   };
 
-  const handleTransfer = async (fromAccountId: string, toAccountId: string, amount: number, date: Date) => {
+  const handleTransfer = async (fromAccountId: string, toAccountId: string, amountInCents: number, date: Date) => {
     if (!user) return;
     
     try {
       const fromAccount = accounts.find(acc => acc.id === fromAccountId);
       const toAccount = accounts.find(acc => acc.id === toAccountId);
       
-      if (!fromAccount || !toAccount) return;
+      if (!fromAccount || !toAccount) throw new Error("Conta de origem ou destino não encontrada.");
 
       // Update account balances
       const newFromBalance = fromAccount.balance - amount;
@@ -507,33 +519,35 @@ const PlaniFlowApp = () => {
       // Create two separate transactions for the transfer
       const outgoingTransaction = {
         description: `Transferência para ${toAccount.name}`,
-        amount,
+        amount: amountInCents,
         date: date.toISOString().split('T')[0],
         type: "expense" as const,
         category_id: null,
         account_id: fromAccountId,
         to_account_id: toAccountId, // Keep reference for transfer relationship
         status: "completed" as const,
-        user_id: user.id
+        user_id: user.id,
+        is_paid: true
       };
 
       const incomingTransaction = {
         description: `Transferência de ${fromAccount.name}`,
-        amount,
+        amount: amountInCents,
         date: date.toISOString().split('T')[0],
         type: "income" as const,
         category_id: null,
         account_id: toAccountId,
         to_account_id: fromAccountId, // Keep reference for transfer relationship
         status: "completed" as const,
-        user_id: user.id
+        user_id: user.id,
+        is_paid: true
       };
 
       const { data: newTransactions, error } = await supabase
         .from('transactions')
         .insert([outgoingTransaction, incomingTransaction])
         .select();
-
+      
       if (error) {
         console.error('Error creating transfer:', error);
         return;
@@ -565,6 +579,11 @@ const PlaniFlowApp = () => {
         }
         return account;
       }));
+
+      return {
+        fromAccount: { ...fromAccount, balance: newFromBalance },
+        toAccount: { ...toAccount, balance: newToBalance }
+      };
     } catch (error) {
       console.error('Error processing transfer:', error);
       if (error instanceof Error) {
@@ -606,7 +625,11 @@ const PlaniFlowApp = () => {
 
         if (error) {
           console.error('Error updating transaction:', error);
-          return;
+          toast({
+            title: "Erro",
+            description: "Erro ao atualizar transação. Tente novamente.",
+            variant: "destructive"
+          });
         }
 
         // Calculate balance changes
@@ -665,7 +688,7 @@ const PlaniFlowApp = () => {
     // Build update data
     const cleanTransactionData = {
       description: updatedTransaction.description,
-      amount: updatedTransaction.amount,
+      amount: updatedTransaction.amount, // Já está em centavos
       type: updatedTransaction.type,
       category_id: updatedTransaction.category_id,
       account_id: updatedTransaction.account_id,
@@ -770,7 +793,11 @@ const PlaniFlowApp = () => {
 
       if (error) {
         console.error('Error deleting transaction:', error);
-        return;
+        toast({
+          title: "Erro",
+          description: "Erro ao excluir transação. Tente novamente.",
+          variant: "destructive"
+        });
       }
 
       // Update account balance by reverting the transaction effect
@@ -840,7 +867,7 @@ const PlaniFlowApp = () => {
     setEditAccountModalOpen(true);
   };
 
-  const handleCreditPayment = async (creditAccountId: string, bankAccountId: string, amount: number, date: Date) => {
+  const handleCreditPayment = async (creditAccountId: string, bankAccountId: string, amountInCents: number, date: Date) => {
     if (!user) return;
     
     try {
@@ -854,26 +881,29 @@ const PlaniFlowApp = () => {
 
       // Create payment transactions
       const creditAccount = accounts.find(acc => acc.id === creditAccountId);
+      // amountInCents já está em centavos
       const creditTransaction = {
         description: `Pagamento fatura ${creditAccount?.name || 'cartão de crédito'}`,
-        amount,
+        amount: amountInCents,
         date: date.toISOString().split('T')[0],
         type: "income" as const, // Payment reduces debt (positive for credit card)
         category_id: paymentCategory?.id || null,
         account_id: creditAccountId,
         status: "completed" as const,
-        user_id: user.id
+        user_id: user.id,
+        is_paid: true
       };
 
       const bankTransaction = {
         description: `Pagamento fatura ${creditAccount?.name || 'cartão de crédito'}`,
-        amount,
+        amount: amountInCents,
         date: date.toISOString().split('T')[0],
         type: "expense" as const, // Payment is an expense for bank account
         category_id: paymentCategory?.id || null,
         account_id: bankAccountId,
         status: "completed" as const,
-        user_id: user.id
+        user_id: user.id,
+        is_paid: true
       };
 
       const { data: newTransactions, error } = await supabase
@@ -888,7 +918,11 @@ const PlaniFlowApp = () => {
 
       if (error || error2) {
         console.error('Error creating credit payment:', error || error2);
-        return;
+        toast({
+          title: "Erro",
+          description: "Erro ao registrar pagamento de fatura. Tente novamente.",
+          variant: "destructive"
+        });
       }
 
       const allNewTransactions = [...(newTransactions || []), ...(newTransactions2 || [])];
@@ -899,8 +933,8 @@ const PlaniFlowApp = () => {
       const bankAccount = accounts.find(acc => acc.id === bankAccountId);
 
       if (creditAccount && bankAccount) {
-        const newCreditBalance = creditAccount.balance + amount;
-        const newBankBalance = bankAccount.balance - amount;
+        const newCreditBalance = creditAccount.balance + amountInCents;
+        const newBankBalance = bankAccount.balance - amountInCents;
 
         await Promise.all([
           supabase
@@ -924,6 +958,11 @@ const PlaniFlowApp = () => {
           }
           return account;
         }));
+
+        return {
+          creditAccount: { ...creditAccount, balance: newCreditBalance },
+          bankAccount: { ...bankAccount, balance: newBankBalance }
+        };
       }
     } catch (error) {
       console.error('Error processing credit payment:', error);
@@ -1067,7 +1106,6 @@ const PlaniFlowApp = () => {
       default:
         return (
            <Dashboard
-            accounts={accounts}
             transactions={transactions}
             categories={categories}
             onTransfer={() => setTransferModalOpen(true)}
@@ -1138,7 +1176,6 @@ const PlaniFlowApp = () => {
         onOpenChange={setAddTransactionModalOpen}
         onAddTransaction={handleAddTransaction}
         onAddInstallmentTransactions={handleAddInstallmentTransactions}
-        accounts={accounts}
       />
 
       <EditAccountModal

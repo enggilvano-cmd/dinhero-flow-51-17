@@ -6,7 +6,7 @@ interface AccountStoreState {
   accounts: Account[];
   setAccounts: (accounts: Account[]) => void;
   addAccount: (account: Account) => void;
-  updateAccounts: (updatedAccounts: Account | Account[]) => void;
+  updateAccount: (updatedAccount: Account) => void;
   removeAccount: (accountId: string) => void;
 }
 
@@ -30,22 +30,12 @@ export const useAccountStore = create<AccountStoreState>((set) => ({
 
   /**
    * Atualiza uma ou mais contas na lista.
-   * Aceita um único objeto Account ou um array de Accounts.
    */
-  updateAccounts: (updatedAccounts) => set((state) => {
-    // Garante que estamos trabalhando com um array
-    const accountsToUpdate = Array.isArray(updatedAccounts) ? updatedAccounts : [updatedAccounts];
-    
-    // Cria um Map para consulta rápida dos IDs das contas atualizadas
-    const updatedMap = new Map(accountsToUpdate.map(acc => [acc.id, acc]));
-
-    // Mapeia as contas existentes, substituindo as que foram atualizadas
-    const newAccounts = state.accounts.map(account => 
-      updatedMap.get(account.id) || account
-    );
-
-    return { accounts: newAccounts };
-  }),
+  updateAccount: (updatedAccount) => set((state) => ({
+    accounts: state.accounts.map(account =>
+      account.id === updatedAccount.id ? updatedAccount : account
+    )
+  })),
 
   /**
    * Remove uma conta da lista pelo ID.

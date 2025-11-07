@@ -150,15 +150,25 @@ export function SettingsPage({ settings, onUpdateSettings, onClearAllData }: Set
         const data = JSON.parse(jsonString);
         
         // Validate data structure
-        if (!data || typeof data !== 'object') {
+        if (!data || typeof data !== 'object' || data === null) {
           throw new Error('Estrutura de dados inválida');
         }
 
-        // Optional: Validate required fields
-        if (data.accounts && !Array.isArray(data.accounts)) {
+        // Deep validation for accounts and transactions
+        if (data.accounts && (!Array.isArray(data.accounts) || !data.accounts.every(acc => 
+            typeof acc.id === 'string' &&
+            typeof acc.name === 'string' &&
+            typeof acc.balance === 'number' &&
+            ['checking', 'savings', 'credit', 'investment'].includes(acc.type)
+        ))) {
           throw new Error('Formato de contas inválido');
         }
-        if (data.transactions && !Array.isArray(data.transactions)) {
+        if (data.transactions && (!Array.isArray(data.transactions) || !data.transactions.every(tx =>
+            typeof tx.id === 'string' &&
+            typeof tx.description === 'string' &&
+            typeof tx.amount === 'number' &&
+            ['income', 'expense', 'transfer'].includes(tx.type)
+        ))) {
           throw new Error('Formato de transações inválido');
         }
 

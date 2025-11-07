@@ -29,7 +29,7 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
-  const updateAccountInStore = useAccountStore((state) => state.updateAccount);
+  const updateAccountInStore = useAccountStore((state) => state.updateAccount); // Corrigido para updateAccount
 
   useEffect(() => {
     if (account) {

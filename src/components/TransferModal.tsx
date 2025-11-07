@@ -6,18 +6,17 @@ import { currencyStringToCents } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createDateFromString, getTodayString } from "@/lib/dateUtils";
-import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast"; // Textarea não está sendo usado, pode ser removido se não for planejado.
+import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, getAvailableBalance } from "@/lib/formatters";
 import { ArrowRight } from "lucide-react";
 import { AccountBalanceDetails } from "./AccountBalanceDetails";
 import { useAccountStore } from "@/stores/AccountStore";
-import { Account } from "@/types";
+import { Account, AccountStoreState } from "@/types";
 
 interface TransferModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onTransfer: (fromAccountId: string, toAccountId: string, amountInCents: number, date: Date) => Promise<{ fromAccount: Account, toAccount: Account }>;
+  onTransfer: (fromAccountId: string, toAccountId: string, amountInCents: number, date: Date) => Promise<{ fromAccount: Account, toAccount: Account } | void>;
 }
 
 export function TransferModal({ open, onOpenChange, onTransfer }: TransferModalProps) {
@@ -30,7 +29,7 @@ export function TransferModal({ open, onOpenChange, onTransfer }: TransferModalP
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const accounts = useAccountStore((state) => state.accounts);
-  const updateAccountsInStore = useAccountStore((state) => state.updateAccounts);
+  const updateAccountInStore = useAccountStore((state: AccountStoreState) => state.updateAccount);
 
   // Contas de origem podem ser qualquer tipo, exceto crédito.
   const sourceAccounts = useMemo(() => accounts.filter(acc => acc.type !== "credit"), [accounts]);
@@ -93,7 +92,7 @@ export function TransferModal({ open, onOpenChange, onTransfer }: TransferModalP
 
     setIsSubmitting(true);
     try {
-      const { fromAccount: updatedFromAccount, toAccount: updatedToAccount } = await onTransfer(
+      const result = await onTransfer(
         // Uma transferência deve ser tratada no backend como duas transações atômicas:
         // 1. Uma despesa na conta de origem (fromAccountId)
         // 2. Uma receita na conta de destino (toAccountId)
@@ -104,8 +103,11 @@ export function TransferModal({ open, onOpenChange, onTransfer }: TransferModalP
         createDateFromString(formData.date)
       );
 
-      // Atualiza as contas no store global
-      updateAccountsInStore([updatedFromAccount, updatedToAccount]);
+      // A atualização do store agora é feita na própria função `handleTransfer` em Index.tsx
+      // que chama `updateAccountInStore` para cada conta.
+      if (result) {
+        // Opcional: pode-se fazer algo com o resultado se necessário.
+      }
 
       toast({
         title: "Sucesso",

@@ -1,0 +1,352 @@
+import { create } from 'zustand'
+import { supabase } from '@/integrations/supabase/client'
+import { Account, Category, Transaction, AuditLog } from '@/types'
+
+// Utilitário de retry
+const retry = async <T>(
+  fn: () => Promise<T>,
+  attempts: number = 3,
+  delay: number = 1000
+): Promise<T> => {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (i === attempts - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
+    }
+  }
+  throw new Error('Retry failed');
+};
+
+// Validações
+const validateTransaction = (
+  type: 'income' | 'expense' | 'transfer',
+  amount: number,
+  accountBalance: number,
+  accountType: string,
+  limitAmount?: number
+) => {
+  if (amount <= 0) {
+    throw new Error('O valor deve ser maior que zero');
+  }
+
+  if (type === 'expense' || type === 'transfer') {
+    const availableBalance = accountType === 'credit'
+      ? (limitAmount || 0)
+      : accountBalance;
+
+    if (amount > availableBalance) {
+      throw new Error('Saldo insuficiente para esta operação');
+    }
+  }
+};
+
+const validateAccount = (account: Partial<Account>) => {
+  if (account.type === 'credit') {
+    if (!account.limit_amount) {
+      throw new Error('Limite de crédito é obrigatório para cartões de crédito');
+    }
+    if (!account.due_date || !account.closing_date) {
+      throw new Error('Data de vencimento e fechamento são obrigatórios para cartões de crédito');
+    }
+  }
+};
+
+// Interface do Store
+export interface AccountStoreState {
+  accounts: Account[];
+  categories: Category[];
+  transactions: Transaction[];
+  auditLogs: AuditLog[];
+  loading: boolean;
+  error: string | null;
+
+  // Funções de carregamento
+  loadAccounts: () => Promise<void>;
+  loadCategories: () => Promise<void>;
+  loadTransactions: () => Promise<void>;
+  loadAuditLogs: () => Promise<void>;
+
+  // Funções de conta
+  addAccount: (account: Omit<Account, 'id'>) => Promise<void>;
+  updateAccount: (id: string, updates: Partial<Account>) => Promise<void>;
+  deleteAccount: (id: string) => Promise<void>;
+
+  // Funções de categoria
+  addCategory: (category: Omit<Category, 'id'>) => Promise<void>;
+  updateCategory: (id: string, updates: Partial<Category>) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
+
+  // Funções de transação
+  addTransaction: (transaction: Omit<Transaction, 'id'>) => Promise<void>;
+  updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<void>;
+  createTransfer: (params: {
+    fromAccountId: string;
+    toAccountId: string;
+    amount: number;
+    date: string;
+    description?: string;
+    tags?: string[];
+  }) => Promise<void>;
+}
+
+export const useAccountStore = create<AccountStoreState>((set, get) => ({
+  accounts: [],
+  categories: [],
+  transactions: [],
+  auditLogs: [],
+  loading: false,
+  error: null,
+
+  loadAccounts: async () => {
+    set({ loading: true, error: null });
+    try {
+      const result = await retry(async () => {
+        const { data, error } = await supabase
+          .from('accounts')
+          .select('*')
+          .order('name');
+
+        if (error) throw error;
+        return data;
+      });
+
+      set({ accounts: result || [] });
+    } catch (error: any) {
+      console.error('Erro ao carregar contas:', error);
+      set({ error: error.message });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  loadCategories: async () => {
+    set({ loading: true, error: null });
+    try {
+      const result = await retry(async () => {
+        const { data, error } = await supabase
+          .from('categories')
+          .select('*')
+          .order('name');
+
+        if (error) throw error;
+        return data;
+      });
+
+      set({ categories: result || [] });
+    } catch (error: any) {
+      console.error('Erro ao carregar categorias:', error);
+      set({ error: error.message });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  loadTransactions: async () => {
+    set({ loading: true, error: null });
+    try {
+      const result = await retry(async () => {
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('*')
+          .order('date', { ascending: false });
+
+        if (error) throw error;
+        return data;
+      });
+
+      set({ transactions: result || [] });
+    } catch (error: any) {
+      console.error('Erro ao carregar transações:', error);
+      set({ error: error.message });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  loadAuditLogs: async () => {
+    set({ loading: true, error: null });
+    try {
+      const result = await retry(async () => {
+        const { data, error } = await supabase
+          .from('audit_log')
+          .select('*')
+          .order('timestamp', { ascending: false });
+
+        if (error) throw error;
+        return data;
+      });
+
+      set({ auditLogs: result || [] });
+    } catch (error: any) {
+      console.error('Erro ao carregar logs de auditoria:', error);
+      set({ error: error.message });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  addAccount: async (account) => {
+    try {
+      validateAccount(account);
+      
+      const { error } = await supabase
+        .from('accounts')
+        .insert([account]);
+
+      if (error) throw error;
+      await get().loadAccounts();
+    } catch (error: any) {
+      console.error('Erro ao adicionar conta:', error);
+      throw error;
+    }
+  },
+
+  updateAccount: async (id, updates) => {
+    try {
+      validateAccount({ ...get().accounts.find(a => a.id === id), ...updates });
+      
+      const { error } = await supabase
+        .from('accounts')
+        .update(updates)
+        .eq('id', id);
+
+      if (error) throw error;
+      await get().loadAccounts();
+    } catch (error: any) {
+      console.error('Erro ao atualizar conta:', error);
+      throw error;
+    }
+  },
+
+  deleteAccount: async (id) => {
+    try {
+      const { error } = await supabase
+        .from('accounts')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      await get().loadAccounts();
+    } catch (error: any) {
+      console.error('Erro ao deletar conta:', error);
+      throw error;
+    }
+  },
+
+  addTransaction: async (transaction) => {
+    try {
+      const account = get().accounts.find(a => a.id === transaction.account_id);
+      if (!account) throw new Error('Conta não encontrada');
+
+      validateTransaction(
+        transaction.type,
+        transaction.amount,
+        account.balance,
+        account.type,
+        account.limit_amount
+      );
+
+      const { error } = await supabase
+        .from('transactions')
+        .insert([transaction]);
+
+      if (error) throw error;
+      
+      await Promise.all([
+        get().loadTransactions(),
+        get().loadAccounts()
+      ]);
+    } catch (error: any) {
+      console.error('Erro ao adicionar transação:', error);
+      throw error;
+    }
+  },
+
+  updateTransaction: async (id, updates) => {
+    try {
+      const account = get().accounts.find(a => a.id === updates.account_id);
+      const transaction = get().transactions.find(t => t.id === id);
+      
+      if (updates.type && updates.amount && account && transaction) {
+        validateTransaction(
+          updates.type,
+          updates.amount,
+          account.balance + transaction.amount, // Adiciona o valor antigo de volta antes de validar
+          account.type,
+          account.limit_amount
+        );
+      }
+
+      const { error } = await supabase
+        .from('transactions')
+        .update(updates)
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      await Promise.all([
+        get().loadTransactions(),
+        get().loadAccounts()
+      ]);
+    } catch (error: any) {
+      console.error('Erro ao atualizar transação:', error);
+      throw error;
+    }
+  },
+
+  deleteTransaction: async (id) => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      await Promise.all([
+        get().loadTransactions(),
+        get().loadAccounts()
+      ]);
+    } catch (error: any) {
+      console.error('Erro ao deletar transação:', error);
+      throw error;
+    }
+  },
+
+  createTransfer: async ({ fromAccountId, toAccountId, amount, date, description, tags }) => {
+    try {
+      const fromAccount = get().accounts.find(a => a.id === fromAccountId);
+      if (!fromAccount) throw new Error('Conta de origem não encontrada');
+
+      validateTransaction(
+        'transfer',
+        amount,
+        fromAccount.balance,
+        fromAccount.type,
+        fromAccount.limit_amount
+      );
+
+      const { error } = await supabase.rpc('create_transfer', {
+        p_from_account_id: fromAccountId,
+        p_to_account_id: toAccountId,
+        p_amount: amount,
+        p_date: date,
+        p_description: description || 'Transferência',
+        p_tags: tags
+      });
+
+      if (error) throw error;
+      
+      await Promise.all([
+        get().loadTransactions(),
+        get().loadAccounts()
+      ]);
+    } catch (error: any) {
+      console.error('Erro ao criar transferência:', error);
+      throw error;
+    }
+  }
+}));

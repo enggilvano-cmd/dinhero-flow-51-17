@@ -4,7 +4,10 @@ export interface Category {
   name: string;
   type: "income" | "expense" | "both";
   color: string;
+  icon?: string;
   user_id?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Account {
@@ -12,11 +15,42 @@ export interface Account {
   name: string;
   type: "checking" | "savings" | "credit" | "investment";
   balance: number;
+  initial_balance?: number;
   limit_amount?: number;
   due_date?: number;
   closing_date?: number;
   color: string;
+  currency: string;
+  include_in_dashboard: boolean;
   user_id?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Transaction {
+  id: string;
+  description: string;
+  amount: number;
+  date: string | Date;
+  type: "income" | "expense" | "transfer";
+  category_id: string | null;
+  account_id: string;
+  status: "pending" | "completed";
+  is_paid: boolean;
+  user_id?: string;
+  to_account_id?: string;
+  fiscal_document_type?: string;
+  fiscal_document_number?: string;
+  accrual_date?: Date;
+  bank_reference?: string;
+  reconciliation_date?: Date;
+  notes?: string;
+  tags?: string[];
+  is_recurring?: boolean;
+  installment_id?: string;
+  installment_number?: number;
+  installment_total?: number;
+  parent_transaction_id?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -33,6 +67,50 @@ export interface CreditBill {
   minimum_payment: number;
   late_fee: number;
   transactions: Transaction[];
+}
+
+export interface AuditLog {
+  id: string;
+  operation: "INSERT" | "UPDATE" | "DELETE";
+  table_name: string;
+  record_id: string;
+  old_values: any;
+  new_values: any;
+  user_id: string;
+  ip_address?: string;
+  timestamp: Date;
+}
+
+export interface TaxReport {
+  year: number;
+  income: {
+    total: number;
+    byCategory: {
+      category_id: string;
+      category_name: string;
+      amount: number;
+      transactions: Transaction[];
+    }[];
+  };
+  expenses: {
+    total: number;
+    byCategory: {
+      category_id: string;
+      category_name: string;
+      amount: number;
+      transactions: Transaction[];
+    }[];
+  };
+  investments: {
+    total: number;
+    byAccount: {
+      account_id: string;
+      account_name: string;
+      initial_balance: number;
+      final_balance: number;
+      earnings: number;
+    }[];
+  };
 }
 
 export interface Transaction {

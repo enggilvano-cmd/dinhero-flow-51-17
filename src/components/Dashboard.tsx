@@ -31,29 +31,10 @@ import {
   ComposedChart,
   XAxis,
   YAxis,
-  ResponsiveContainer
+  ResponsiveContainer,
 } from "recharts";
-
-interface Account {
-  id: string;
-  name: string;
-  type: "checking" | "savings" | "credit" | "investment";
-  balance: number;
-  limit_amount?: number; // For credit cards
-  color: string;
-}
-
-interface Transaction {
-  id: string;
-  description: string;
-  amount: number;
-  date: Date | string;
-  type: "income" | "expense" | "transfer";
-  category_id: string;
-  account_id: string;
-  to_account_id?: string;
-  status: "pending" | "completed";
-}
+import { useAccountStore } from "@/stores/AccountStore";
+import { Account, Transaction, Category } from "@/types";
 
 interface Category {
   id: string;
@@ -63,7 +44,6 @@ interface Category {
 }
 
 interface DashboardProps {
-  accounts: Account[];
   transactions: Transaction[];
   categories: Category[];
   onTransfer: () => void;
@@ -80,9 +60,10 @@ interface DashboardProps {
   ) => void;
 }
 
-export function Dashboard({ accounts, transactions, categories, onTransfer, onAddTransaction, onNavigateToAccounts, onNavigateToTransactions }: DashboardProps) {
+export function Dashboard({ transactions, categories, onTransfer, onAddTransaction, onNavigateToAccounts, onNavigateToTransactions }: DashboardProps) {
   const { formatCurrency } = useSettings();
   const { chartConfig: responsiveConfig, isMobile } = useChartResponsive();
+  const accounts = useAccountStore((state) => state.accounts);
   
   // Estado dos filtros de data
   const [dateFilter, setDateFilter] = useState<"all" | "current_month" | "month_picker" | "custom">("current_month");
@@ -133,11 +114,12 @@ export function Dashboard({ accounts, transactions, categories, onTransfer, onAd
 
   // Dados para o gráfico de evolução (diário ou mensal)
   const chartData = useMemo(() => {
+    const transactionsToProcess = getFilteredTransactions();
+
     if (chartScale === "daily") {
       // Dados diários baseados no mês e ano selecionado na opção mensal
-      let dailyFilteredTrans = transactions;
-      
-      // Filtrar pelo mês e ano da opção mensal quando em escala diária
+      let dailyFilteredTrans = transactionsToProcess;
+
       if (dateFilter === "current_month") {
         const now = new Date();
         const start = startOfMonth(now);
@@ -207,12 +189,12 @@ export function Dashboard({ accounts, transactions, categories, onTransfer, onAd
       return sortedDays;
     } else {
       // Dados mensais baseados no ano e mês específicos
-      const monthlyTotals = transactions.reduce((acc, transaction) => {
+      const monthlyTotals = transactionsToProcess.reduce((acc, transaction) => {
         const transactionDate = typeof transaction.date === 'string' ? createDateFromString(transaction.date) : transaction.date;
         const transactionYear = transactionDate.getFullYear();
         const transactionMonth = transactionDate.getMonth() + 1;
         
-        // Filtrar transações do ano específico
+        // Filtrar transações do ano específico (se aplicável, mas o filtro principal já fez isso)
         if (transactionYear === chartYear) {
           const monthKey = format(transactionDate, 'yyyy-MM');
           
@@ -261,7 +243,7 @@ export function Dashboard({ accounts, transactions, categories, onTransfer, onAd
 
       return chartMonths;
     }
-  }, [transactions, chartScale, dateFilter, selectedMonth, customStartDate, customEndDate, chartYear]);
+  }, [getFilteredTransactions, chartScale, dateFilter, selectedMonth, customStartDate, customEndDate, chartYear]);
 
   // Dados mensais para o gráfico de evolução (manter para compatibilidade)
   const monthlyData = chartData;
@@ -651,234 +633,233 @@ export function Dashboard({ accounts, transactions, categories, onTransfer, onAd
         </div>
 
         {/* Gráfico de Evolução Mensal - Ocupa toda a linha */}
-        {monthlyData.length > 0 && (
-          <Card className="financial-card">
-            <CardHeader className="pb-2">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <TrendingUp className="h-4 w-4" />
-                  Evolução {chartScale === "daily" ? "Diária" : "Mensal"} - Receitas vs Despesas
-                </CardTitle>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                  {/* Controles de escala */}
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant={chartScale === "monthly" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setChartScale("monthly")}
-                      className="h-7 px-2 text-xs"
-                    >
-                      <BarChart3 className="h-3 w-3 mr-1" />
-                      Mensal
-                    </Button>
-                    <Button
-                      variant={chartScale === "daily" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setChartScale("daily")}
-                      className="h-7 px-2 text-xs"
-                    >
-                      <BarChart3 className="h-3 w-3 mr-1" />
-                      Diário
-                    </Button>
-                  </div>
-                  
-                  {/* Controle de ano (apenas para escala mensal) */}
-                  {chartScale === "monthly" && (
-                    <Select value={chartYear.toString()} onValueChange={(value) => setChartYear(parseInt(value))}>
-                      <SelectTrigger className="h-7 w-20 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => (
-                          <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-3 pt-0">
-              <div className="relative">
-                {/* Empty state quando não há dados */}
-                {monthlyData.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-[200px] sm:h-[250px] text-muted-foreground">
-                    <BarChart3 className="h-12 w-12 mb-3 opacity-50" />
-                    <p className="text-sm font-medium">Nenhum dado disponível</p>
-                    <p className="text-xs opacity-70">
-                      {chartScale === "daily" 
-                        ? "Não há transações no período selecionado" 
-                        : `Não há transações em ${chartYear}`
-                      }
-                    </p>
-                  </div>
-                ) : (
-                  <ChartContainer 
-                    config={{
-                      receitas: {
-                        label: "Receitas",
-                        color: "hsl(var(--success))",
-                      },
-                      despesas: {
-                        label: "Despesas", 
-                        color: "hsl(var(--destructive))",
-                      },
-                      saldo: {
-                        label: "Saldo Acumulado",
-                        color: "hsl(var(--primary))",
-                      }
-                    }} 
-                    className="h-[200px] sm:h-[300px] lg:h-[350px] w-full"
+        <Card className="financial-card">
+          <CardHeader className="pb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <TrendingUp className="h-4 w-4" />
+                Evolução {chartScale === "daily" ? "Diária" : "Mensal"} - Receitas vs Despesas
+              </CardTitle>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                {/* Controles de escala */}
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant={chartScale === "monthly" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setChartScale("monthly")}
+                    className="h-7 px-2 text-xs"
                   >
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart 
-                        data={monthlyData} 
-                        margin={{
-                          top: 20,
-                          right: isMobile ? 10 : 30,
-                          left: isMobile ? 10 : 20,
-                          bottom: isMobile ? 60 : 50
-                        }}
-                      >
-                        {/* Grid lines */}
-                        <defs>
-                          <linearGradient id="colorReceitas" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="hsl(var(--success))" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0.3}/>
-                          </linearGradient>
-                          <linearGradient id="colorDespesas" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0.3}/>
-                          </linearGradient>
-                        </defs>
-
-                        <XAxis 
-                          dataKey="month" 
-                          {...getBarChartAxisProps(responsiveConfig).xAxis}
-                          interval={
-                            chartScale === "daily" 
-                              ? (isMobile 
-                                  ? Math.max(0, Math.floor(monthlyData.length / 7)) 
-                                  : Math.max(0, Math.floor(monthlyData.length / 15))
-                                )
-                              : 0
-                          }
-                          minTickGap={chartScale === "daily" ? (isMobile ? 15 : 8) : 5}
-                          tickMargin={10}
-                          angle={chartScale === "daily" ? (isMobile ? -45 : -30) : 0}
-                          textAnchor={chartScale === "daily" ? "end" : "middle"}
-                        />
-                        
-                        <YAxis 
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ 
-                            fontSize: isMobile ? 9 : 11,
-                            fill: 'hsl(var(--muted-foreground))'
-                          }}
-                          tickFormatter={(value) => formatCurrencyForAxis(value, isMobile)}
-                          width={isMobile ? 50 : 80}
-                        />
-
-                        <ChartTooltip 
-                          content={<ChartTooltipContent 
-                            className="bg-background/95 backdrop-blur-sm border border-border/50 shadow-lg"
-                            labelClassName="font-medium text-foreground"
-                            indicator="dot"
-                          />}
-                          formatter={(value: number, name: string) => [
-                            formatCurrency(value), 
-                            name === 'receitas' ? 'Receitas' : 
-                            name === 'despesas' ? 'Despesas' : 
-                            name === 'saldo' ? 'Saldo Acumulado' : name
-                          ]}
-                          labelFormatter={(label) => {
-                            if (chartScale === "daily") {
-                              return `Dia ${label}`;
-                            }
-                            return `Mês de ${label}`;
-                          }}
-                        />
-
-                        {/* Legenda apenas no desktop */}
-                        {!isMobile && (
-                          <ChartLegend 
-                            content={<ChartLegendContent className="flex justify-center gap-6" />}
-                            verticalAlign="top"
-                          />
-                        )}
-                        
-                        {/* Barras de Receitas com gradiente */}
-                        <Bar 
-                          dataKey="receitas" 
-                          fill="url(#colorReceitas)"
-                          radius={[4, 4, 0, 0]}
-                          name="Receitas"
-                        />
-                        
-                        {/* Barras de Despesas com gradiente */}
-                        <Bar 
-                          dataKey="despesas" 
-                          fill="url(#colorDespesas)"
-                          radius={[4, 4, 0, 0]}
-                          name="Despesas"
-                        />
-                        
-                        {/* Linha de saldo com pontos condicionais */}
-                        <Line 
-                          type="monotone" 
-                          dataKey="saldo" 
-                          stroke="hsl(var(--primary))"
-                          strokeWidth={isMobile ? 2 : 3}
-                          dot={(props: any) => {
-                            const { cx, cy, payload } = props;
-                            const saldo = payload?.saldo || 0;
-                            return (
-                              <circle
-                                cx={cx}
-                                cy={cy}
-                                r={isMobile ? 3 : 4}
-                                fill={saldo >= 0 ? "hsl(var(--primary))" : "hsl(var(--destructive))"}
-                                stroke="hsl(var(--background))"
-                                strokeWidth={2}
-                              />
-                            );
-                          }}
-                          activeDot={{ 
-                            r: isMobile ? 5 : 6, 
-                            strokeWidth: 2,
-                            fill: "hsl(var(--primary))",
-                            stroke: "hsl(var(--background))"
-                          }}
-                          connectNulls={false}
-                          name="Saldo Acumulado"
-                        />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </ChartContainer>
-                )}
-
-                {/* Indicadores visuais no mobile */}
-                {isMobile && monthlyData.length > 0 && (
-                  <div className="flex justify-center gap-4 mt-3 text-xs">
-                    <div className="flex items-center gap-1">
-                      <div className="w-3 h-3 rounded bg-success"></div>
-                      <span className="text-muted-foreground">Receitas</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-3 h-3 rounded bg-destructive"></div>
-                      <span className="text-muted-foreground">Despesas</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-3 h-0.5 bg-primary"></div>
-                      <span className="text-muted-foreground">Saldo</span>
-                    </div>
-                  </div>
+                    <BarChart3 className="h-3 w-3 mr-1" />
+                    Mensal
+                  </Button>
+                  <Button
+                    variant={chartScale === "daily" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setChartScale("daily")}
+                    className="h-7 px-2 text-xs"
+                  >
+                    <BarChart3 className="h-3 w-3 mr-1" />
+                    Diário
+                  </Button>
+                </div>
+                
+                {/* Controle de ano (apenas para escala mensal) */}
+                {chartScale === "monthly" && (
+                  <Select value={chartYear.toString()} onValueChange={(value) => setChartYear(parseInt(value))}>
+                    <SelectTrigger className="h-7 w-20 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => (
+                        <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          </CardHeader>
+          <CardContent className="p-3 pt-0">
+            <div className="relative">
+              {/* Empty state quando não há dados */}
+              {monthlyData.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-[200px] sm:h-[250px] text-muted-foreground">
+                  <BarChart3 className="h-12 w-12 mb-3 opacity-50" />
+                  <p className="text-sm font-medium">Nenhum dado disponível</p>
+                  <p className="text-xs opacity-70">
+                    {chartScale === "daily" 
+                      ? "Não há transações no período selecionado" 
+                      : `Não há transações em ${chartYear}`
+                    }
+                  </p>
+                </div>
+              ) : (
+                <ChartContainer 
+                  config={{
+                    receitas: {
+                      label: "Receitas",
+                      color: "hsl(var(--success))",
+                    },
+                    despesas: {
+                      label: "Despesas", 
+                      color: "hsl(var(--destructive))",
+                    },
+                    saldo: {
+                      label: "Saldo Acumulado",
+                      color: "hsl(var(--primary))",
+                    }
+                  }} 
+                  className="h-[200px] sm:h-[300px] lg:h-[350px] w-full"
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart 
+                      data={monthlyData} 
+                      margin={{
+                        top: 20,
+                        right: isMobile ? 10 : 30,
+                        left: isMobile ? 10 : 20,
+                        bottom: isMobile ? 60 : 50
+                      }}
+                    >
+                      {/* Grid lines */}
+                      <defs>
+                        <linearGradient id="colorReceitas" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(var(--success))" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0.3}/>
+                        </linearGradient>
+                        <linearGradient id="colorDespesas" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0.3}/>
+                        </linearGradient>
+                      </defs>
+
+                      <XAxis 
+                        dataKey="month" 
+                        {...getBarChartAxisProps(responsiveConfig).xAxis}
+                        interval={
+                          chartScale === "daily" 
+                            ? (isMobile 
+                                ? Math.max(0, Math.floor(monthlyData.length / 7)) 
+                                : Math.max(0, Math.floor(monthlyData.length / 15))
+                              )
+                            : 0
+                        }
+                        minTickGap={chartScale === "daily" ? (isMobile ? 15 : 8) : 5}
+                        tickMargin={10}
+                        angle={chartScale === "daily" ? (isMobile ? -45 : -30) : 0}
+                        textAnchor={chartScale === "daily" ? "end" : "middle"}
+                      />
+                      
+                      <YAxis 
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ 
+                          fontSize: isMobile ? 9 : 11,
+                          fill: 'hsl(var(--muted-foreground))'
+                        }}
+                        tickFormatter={(value) => formatCurrencyForAxis(value, isMobile)}
+                        width={isMobile ? 50 : 80}
+                      />
+
+                      <ChartTooltip 
+                        content={<ChartTooltipContent 
+                          className="bg-background/95 backdrop-blur-sm border border-border/50 shadow-lg"
+                          labelClassName="font-medium text-foreground"
+                          indicator="dot"
+                        />}
+                        formatter={(value: number, name: string) => [
+                          formatCurrency(value), 
+                          name === 'receitas' ? 'Receitas' : 
+                          name === 'despesas' ? 'Despesas' : 
+                          name === 'saldo' ? 'Saldo Acumulado' : name
+                        ]}
+                        labelFormatter={(label) => {
+                          if (chartScale === "daily") {
+                            return `Dia ${label}`;
+                          }
+                          return `Mês de ${label}`;
+                        }}
+                      />
+
+                      {/* Legenda apenas no desktop */}
+                      {!isMobile && (
+                        <ChartLegend 
+                          content={<ChartLegendContent className="flex justify-center gap-6" />}
+                          verticalAlign="top"
+                        />
+                      )}
+                      
+                      {/* Barras de Receitas com gradiente */}
+                      <Bar 
+                        dataKey="receitas" 
+                        fill="url(#colorReceitas)"
+                        radius={[4, 4, 0, 0]}
+                        name="Receitas"
+                      />
+                      
+                      {/* Barras de Despesas com gradiente */}
+                      <Bar 
+                        dataKey="despesas" 
+                        fill="url(#colorDespesas)"
+                        radius={[4, 4, 0, 0]}
+                        name="Despesas"
+                      />
+                      
+                      {/* Linha de saldo com pontos condicionais */}
+                      <Line 
+                        type="monotone" 
+                        dataKey="saldo" 
+                        stroke="hsl(var(--primary))"
+                        strokeWidth={isMobile ? 2 : 3}
+                        dot={(props: any) => {
+                          const { cx, cy, payload, key: dotKey } = props;
+                          const saldo = payload?.saldo || 0;
+                          return (
+                            <circle
+                              key={dotKey}
+                              cx={cx}
+                              cy={cy}
+                              r={isMobile ? 3 : 4}
+                              fill={saldo >= 0 ? "hsl(var(--primary))" : "hsl(var(--destructive))"}
+                              stroke="hsl(var(--background))"
+                              strokeWidth={2}
+                            />
+                          );
+                        }}
+                        activeDot={{ 
+                          r: isMobile ? 5 : 6, 
+                          strokeWidth: 2,
+                          fill: "hsl(var(--primary))",
+                          stroke: "hsl(var(--background))"
+                        }}
+                        connectNulls={false}
+                        name="Saldo Acumulado"
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              )}
+
+              {/* Indicadores visuais no mobile */}
+              {isMobile && monthlyData.length > 0 && (
+                <div className="flex justify-center gap-4 mt-3 text-xs">
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded bg-success"></div>
+                    <span className="text-muted-foreground">Receitas</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded bg-destructive"></div>
+                    <span className="text-muted-foreground">Despesas</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-0.5 bg-primary"></div>
+                    <span className="text-muted-foreground">Saldo</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Cards inferiores em grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
@@ -939,13 +920,13 @@ export function Dashboard({ accounts, transactions, categories, onTransfer, onAd
           </CardContent>
         </Card>
 
-          {/* Cards de Transações Recentes */}
-          <Card className="financial-card cursor-pointer apple-interaction" onClick={() => onNavigateToTransactions?.()}>
-          <CardHeader className="pb-2">
+        {/* Transações Recentes */}
+        <Card className="financial-card cursor-pointer apple-interaction" onClick={() => onNavigateToTransactions?.("all", "all", "all")}>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-sm flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
               Transações Recentes
             </CardTitle>
+            <span className="text-xs text-muted-foreground">{getPeriodLabel()}</span>
           </CardHeader>
           <CardContent className="p-3 pt-0">
             {filteredTransactions.length === 0 ? (

@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Transaction, Account } from "@/types";
 import { useCategories } from "@/hooks/useCategories";
-import { createDateFromString, formatDateForStorage } from "@/lib/dateUtils";
+import { createDateFromString } from "@/lib/dateUtils";
 import { InstallmentEditScopeDialog, EditScope } from "./InstallmentEditScopeDialog";
 import { useAccountStore } from "@/stores/AccountStore";
 
@@ -41,10 +41,9 @@ export function EditTransactionModal({
   });
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
   const { toast } = useToast();
-  const { categories } = useCategories();
   const accounts = useAccountStore((state) => state.accounts);
-
-  useEffect(() => {
+  const { categories } = useCategories();
+  useEffect(() => { 
     // Apenas atualize o formulário quando o modal for aberto ou a transação real mudar.
     // Depender de `transaction.id` previne re-execuções desnecessárias.
     if (open && transaction) {
@@ -154,7 +153,6 @@ export function EditTransactionModal({
   );
 
   const isInstallment = transaction?.installments && transaction.installments > 1;
-  const selectedAccount = accounts.find(acc => acc.id === formData.account_id);
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
