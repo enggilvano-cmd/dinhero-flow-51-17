@@ -84,7 +84,6 @@ interface Account {
 }
 
 interface AnalyticsPageProps {
-  // Removido 'transactions', não é mais necessário aqui
   accounts: Account[];
 }
 
@@ -111,8 +110,8 @@ export default function AnalyticsPage({ accounts }: AnalyticsPageProps) {
 
       const { data, error } = await supabase.rpc('get_analytics_report', {
         p_user_id: user.id,
-        p_start_date: customStartDate.toISOString(),
-        p_end_date: customEndDate.toISOString()
+        p_start_date: format(customStartDate, 'yyyy-MM-dd'), // CORREÇÃO: Formata para 'YYYY-MM-DD'
+        p_end_date: format(customEndDate, 'yyyy-MM-dd')     // CORREÇÃO: Formata para 'YYYY-MM-DD'
       });
 
       if (error) {

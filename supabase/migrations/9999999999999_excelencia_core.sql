@@ -90,16 +90,6 @@ BEGIN
       SET balance = balance + v_new_amount
       WHERE id = NEW.account_id;
     END IF;
-
-    -- Lida com contas de destino (transferências)
-    -- (A lógica de 'is_paid' também se aplica aqui)
-    IF OLD.type = 'transfer' AND OLD.to_account_id IS NOT NULL THEN
-      UPDATE public.accounts SET balance = balance - v_old_amount WHERE id = OLD.to_account_id;
-    END IF;
-    IF NEW.type = 'transfer' AND NEW.to_account_id IS NOT NULL THEN
-      UPDATE public.accounts SET balance = balance - v_new_amount WHERE id = NEW.to_account_id;
-    END IF;
-    
   END IF;
 
   -- Retorna a linha (NEW ou OLD) para o trigger
@@ -119,6 +109,52 @@ CREATE TRIGGER on_transaction_change
 AFTER INSERT OR UPDATE OR DELETE ON transactions
 FOR EACH ROW EXECUTE FUNCTION public.update_account_balance(); -- Chamando a nova função
 
+
+/***
+ * ============================================================================
+ * CORREÇÃO: Criação da tabela 'credit_bills' e suas RLS
+ * Esta tabela era referenciada, mas não existia.
+ * ============================================================================
+ */
+
+CREATE TABLE IF NOT EXISTS credit_bills (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'open', -- 'open', 'closed', 'paid'
+    start_date DATE NOT NULL,
+    closing_date DATE NOT NULL,
+    due_date DATE NOT NULL,
+    total_amount BIGINT NOT NULL DEFAULT 0, -- Total de transações na fatura
+    paid_amount BIGINT NOT NULL DEFAULT 0,  -- Valor já pago da fatura
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (account_id, closing_date) -- Garante que não há faturas duplicadas para a mesma conta no mesmo fechamento
+);
+
+-- Políticas de RLS para 'credit_bills'
+ALTER TABLE credit_bills ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Usuários podem ver apenas suas próprias faturas de crédito" ON credit_bills;
+CREATE POLICY "Usuários podem ver apenas suas próprias faturas de crédito"
+    ON credit_bills FOR SELECT
+    USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Usuários podem criar faturas de crédito para si mesmos" ON credit_bills;
+CREATE POLICY "Usuários podem criar faturas de crédito para si mesmos"
+    ON credit_bills FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Usuários podem atualizar suas próprias faturas de crédito" ON credit_bills;
+CREATE POLICY "Usuários podem atualizar suas próprias faturas de crédito"
+    ON credit_bills FOR UPDATE
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Usuários podem deletar suas próprias faturas de crédito" ON credit_bills;
+CREATE POLICY "Usuários podem deletar suas próprias faturas de crédito"
+    ON credit_bills FOR DELETE
+    USING (auth.uid() = user_id);
 
 /***
  * ============================================================================
@@ -288,6 +324,92 @@ BEGIN
   INTO v_result;
 
   RETURN v_result;
+END;
+$$;
+
+
+/***
+ * ============================================================================
+ * CORREÇÃO: Função RPC para criar transações de transferência
+ * Esta função é chamada pelo frontend para criar uma transferência
+ * e garante que os saldos sejam atualizados corretamente.
+ * ============================================================================
+ */
+
+CREATE OR REPLACE FUNCTION public.create_transfer_transaction(
+  p_user_id UUID,
+  p_from_account_id UUID,
+  p_to_account_id UUID,
+  p_amount BIGINT, -- Valor em centavos
+  p_date TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_transfer_id UUID := uuid_generate_v4();
+BEGIN
+  -- 1. Transação de DESPESA na conta de origem
+  INSERT INTO public.transactions (
+    user_id, account_id, amount, date, description, type, transfer_id, include_in_reports, is_paid
+  ) VALUES (
+    p_user_id, p_from_account_id, -ABS(p_amount), p_date, 'Transferência enviada', 'expense', v_transfer_id, FALSE, TRUE
+  );
+
+  -- 2. Transação de RECEITA na conta de destino
+  INSERT INTO public.transactions (
+    user_id, account_id, amount, date, description, type, transfer_id, include_in_reports, is_paid
+  ) VALUES (
+    p_user_id, p_to_account_id, ABS(p_amount), p_date, 'Transferência recebida', 'income', v_transfer_id, FALSE, TRUE
+  );
+
+  -- Os triggers 'on_transaction_change' cuidarão da atualização dos saldos das contas.
+
+END;
+$$;
+
+
+/***
+ * ============================================================================
+ * CORREÇÃO: Função RPC para criar transações de transferência
+ * Esta função é chamada pelo frontend para criar uma transferência
+ * e garante que os saldos sejam atualizados corretamente.
+ * ============================================================================
+ */
+
+CREATE OR REPLACE FUNCTION public.create_transfer_transaction(
+  p_user_id UUID,
+  p_from_account_id UUID,
+  p_to_account_id UUID,
+  p_amount BIGINT, -- Valor em centavos
+  p_date TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_transfer_id UUID := uuid_generate_v4();
+BEGIN
+  -- 1. Transação de DESPESA na conta de origem
+  INSERT INTO public.transactions (
+    user_id, account_id, amount, date, description, type, transfer_id, include_in_reports, is_paid
+  ) VALUES (
+    p_user_id, p_from_account_id, -ABS(p_amount), p_date, 'Transferência enviada', 'expense', v_transfer_id, FALSE, TRUE
+  );
+
+  -- 2. Transação de RECEITA na conta de destino
+  INSERT INTO public.transactions (
+    user_id, account_id, amount, date, description, type, transfer_id, include_in_reports, is_paid
+  ) VALUES (
+    p_user_id, p_to_account_id, ABS(p_amount), p_date, 'Transferência recebida', 'income', v_transfer_id, FALSE, TRUE
+  );
+
+  -- Os triggers 'on_transaction_change' cuidarão da atualização dos saldos das contas.
+
 END;
 $$;
 

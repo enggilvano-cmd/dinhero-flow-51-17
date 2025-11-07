@@ -1,4 +1,5 @@
 import React from 'react'
+import { useState, useEffect } from 'react'; // CORREÇÃO: Importar useState e useEffect
 import { useAccountStore } from '@/stores/AccountStore' // Importa o hook 'create' padrão
 import { formatCurrency } from '@/lib/formatters' // Importa o formatador de centavos
 import {
@@ -8,9 +9,13 @@ import {
   CardContent,
   CardFooter,
 } from './ui/card'
+import { Button } from './ui/button'
+import { Plus } from 'lucide-react'
 import { Skeleton } from './ui/skeleton'
 import { AddAccountModal } from './AddAccountModal'
 import { EditAccountModal } from './EditAccountModal'
+import { Account } from '@/types'; // CORREÇÃO: Importar o tipo Account
+import { supabase } from '@/integrations/supabase/client'; // CORREÇÃO: Importar supabase
 
 /**
  * Componente de esqueleto para carregamento
@@ -49,12 +54,55 @@ export const AccountsPage: React.FC = () => {
   // NOTA DO PROGRAMADOR:
   // O uso do store agora é idiomático e simples.
   // 'useSyncExternalStore' foi removido.
-  const { accounts, loading, loadAccounts } = useAccountStore()
+  const { accounts, loading, loadAccounts, addAccount: addAccountToStore, updateAccount: updateAccountInStore } = useAccountStore()
 
-  React.useEffect(() => {
-    // Carrega os dados na montagem do componente
-    loadAccounts()
-  }, [loadAccounts])
+  useEffect(() => { // CORREÇÃO: Usar useEffect
+    if (!loading && accounts.length === 0) { // CORREÇÃO: Carregar apenas se não estiver carregando e não houver contas
+      loadAccounts(); 
+    }
+  }, [loadAccounts, loading]);
+
+  const handleAddAccount = async (newAccountData: Omit<Account, "id" | "user_id" | "created_at" | "updated_at">): Promise<Account> => {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) throw new Error("User not authenticated");
+
+    const { data, error } = await supabase
+      .from('accounts')
+      .insert({ ...newAccountData, user_id: userData.user.id })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  };
+
+  const handleEditAccount = async (updatedAccountData: Account): Promise<Account> => {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) throw new Error("User not authenticated");
+
+    const { data, error } = await supabase
+      .from('accounts')
+      .update({
+        name: updatedAccountData.name,
+        type: updatedAccountData.type,
+        balance: updatedAccountData.balance,
+        limit_amount: updatedAccountData.limit_amount,
+        due_date: updatedAccountData.due_date,
+        closing_date: updatedAccountData.closing_date,
+        color: updatedAccountData.color,
+      })
+      .eq('id', updatedAccountData.id)
+      .eq('user_id', userData.user.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  };
+
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
 
   if (loading && accounts.length === 0) {
     return <AccountsLoadingSkeleton />
@@ -64,7 +112,11 @@ export const AccountsPage: React.FC = () => {
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Contas</h1>
-        <AddAccountModal onSuccess={loadAccounts} />
+        <Button onClick={() => setAddModalOpen(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Adicionar Conta
+        </Button>
+        <AddAccountModal open={addModalOpen} onOpenChange={setAddModalOpen} onAddAccount={handleAddAccount} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -91,12 +143,28 @@ export const AccountsPage: React.FC = () => {
               </p>
             </CardContent>
             <CardFooter>
-              {/* O modal de edição recebe a conta como prop */}
-              <EditAccountModal account={account} onSuccess={loadAccounts} />
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setSelectedAccount(account);
+                  setEditModalOpen(true);
+                }}
+              >
+                Editar
+              </Button>
             </CardFooter>
           </Card>
         ))}
       </div>
+
+      {selectedAccount && (
+        <EditAccountModal
+          open={editModalOpen}
+          onOpenChange={setEditModalOpen}
+          onEditAccount={handleEditAccount}
+          account={selectedAccount}
+        />
+      )}
     </div>
-  )
+  );
 }

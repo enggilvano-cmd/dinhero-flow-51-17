@@ -34,17 +34,19 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Account, CreditBill } from '@/integrations/supabase/types'
 import { useAccountStore } from '@/stores/AccountStore'
-import { toast } from 'sonner'
-import { supabase } from '@/integrations/supabase/client'
-// CORREÇÃO: Importa de './CurrencyInput' (sem '/forms/')
+import { useToast } from '@/hooks/use-toast'
 import { CurrencyInput } from './CurrencyInput'
 
 interface CreditPaymentModalProps {
   creditAccount: Account | null 
   bill: CreditBill | null 
+  // CORREÇÃO: Adicionar onPayment como prop, que será a handlePayment da CreditBillsPage
+  onPayment: (creditAccountId: string, bankAccountId: string, amountInCents: number, date: Date) => Promise<any>;
   onPaymentSuccess: () => void
   open: boolean
   onOpenChange: (open: boolean) => void
+  invoiceValueInCents: number;
+  nextInvoiceValueInCents: number;
 }
 
 // Schema de validação
@@ -59,7 +61,10 @@ const formSchema = z.object({
 export const CreditPaymentModal: React.FC<CreditPaymentModalProps> = ({
   creditAccount,
   bill,
+  onPayment, // CORREÇÃO: Receber onPayment como prop
   onPaymentSuccess,
+  invoiceValueInCents, // CORREÇÃO: Receber invoiceValueInCents
+  nextInvoiceValueInCents, // CORREÇÃO: Receber nextInvoiceValueInCents
   open,
   onOpenChange,
 }) => {
@@ -70,6 +75,7 @@ export const CreditPaymentModal: React.FC<CreditPaymentModalProps> = ({
     return accounts.filter((acc) => acc.type !== 'credit_card')
   }, [accounts])
 
+  const { toast } = useToast(); // CORREÇÃO: Usar useToast aqui
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     // CORREÇÃO: 'defaultValues' estático para evitar erro na inicialização
@@ -85,7 +91,7 @@ export const CreditPaymentModal: React.FC<CreditPaymentModalProps> = ({
     if (open && bill) {
       form.reset({
         accountId: undefined,
-        amount: Math.abs(bill.total_amount),
+        amount: Math.abs(invoiceValueInCents), // CORREÇÃO: Usar invoiceValueInCents
         date: new Date(),
       })
     } else if (!open) {
@@ -100,49 +106,26 @@ export const CreditPaymentModal: React.FC<CreditPaymentModalProps> = ({
   // Função chamada no submit
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!creditAccount) {
-      toast.error('Erro: Conta de crédito não selecionada.')
+      toast({ title: 'Erro', description: 'Conta de crédito não selecionada.', variant: 'destructive' }); // CORREÇÃO: Usar useToast
       return
     }
 
     try {
-      const amountInCents = values.amount
-      const dateString = format(values.date, 'yyyy-MM-dd')
+      // CORREÇÃO: Chamar a prop onPayment, que já lida com a lógica de transferência e atualização de fatura
+      await onPayment(
+        creditAccount.id,
+        values.accountId,
+        values.amount, // amount já está em centavos
+        values.date
+      );
 
-      // 1. Cria a DESPESA na conta de origem
-      const { error: paymentError } = await supabase.from('transactions').insert({
-        account_id: values.accountId,
-        description: `Pagamento Fatura ${creditAccount.name}`,
-        amount: -Math.abs(amountInCents),
-        date: dateString,
-        category_id: null,
-        include_in_reports: false,
-        is_paid: true,
-      })
-
-      if (paymentError) throw paymentError
-
-      // 2. Cria a RECEITA na conta de destino
-      const { error: creditError } = await supabase.from('transactions').insert({
-        account_id: creditAccount.id,
-        description: `Pagamento Recebido`,
-        amount: Math.abs(amountInCents),
-        date: dateString,
-        category_id: null,
-        include_in_reports: false,
-        is_paid: true,
-      })
-
-      if (creditError) throw creditError
-
-      toast.success('Pagamento da fatura registrado!')
+      toast({ title: 'Sucesso', description: 'Pagamento da fatura registrado!', variant: 'default' }); // CORREÇÃO: Usar useToast
       onOpenChange(false)
       loadAccounts()
       onPaymentSuccess()
     } catch (error: any) {
-      console.error('Erro ao pagar fatura:', error)
-      toast.error('Erro ao registrar pagamento.', {
-        description: error.message,
-      })
+      console.error('Erro ao pagar fatura:', error);
+      toast({ title: 'Erro', description: error.message || 'Erro ao registrar pagamento.', variant: 'destructive' }); // CORREÇÃO: Usar useToast
     }
   }
 

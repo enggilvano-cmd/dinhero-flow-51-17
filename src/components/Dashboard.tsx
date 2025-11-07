@@ -4,13 +4,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrency } from '@/lib/formatters' // Importa o formatador de centavos
 import { useAccountStore } from '@/stores/AccountStore' // Importa o store unificado
 
-export const Dashboard: React.FC = () => {
-  //
-  // === CORREÇÃO DE LÓGICA ===
-  //
-  // Antes, usava `useAccountStore` (para dados) e `useAccountActions` (para ações).
-  // Agora, pegamos tudo do hook unificado `useAccountStore`.
-  //
+interface DashboardProps {} // CORREÇÃO: Remover props desnecessárias
+
+export const Dashboard: React.FC<DashboardProps> = () => {
   const {
     accounts,
     categories,
@@ -20,10 +16,12 @@ export const Dashboard: React.FC = () => {
   } = useAccountStore()
 
   // Carrega os dados no mount (embora o Layout já deva fazer isso,
-  // é uma boa prática defensiva)
+  // é uma boa prática defensiva, garantindo que os dados estejam presentes)
   React.useEffect(() => {
-    loadAccounts()
-    loadCategories()
+    if (!loading && (accounts.length === 0 || categories.length === 0)) {
+      loadAccounts();
+      loadCategories();
+    }
   }, [loadAccounts, loadCategories])
 
   // Calcula o saldo total

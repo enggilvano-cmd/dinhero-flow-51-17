@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar as CalendarIcon, CreditCard, DollarSign, Plus, Receipt, Filter, Eye, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; 
 import { CreditPaymentModal } from "./CreditPaymentModal";
 import { CreditBillDetailsModal } from "./CreditBillDetailsModal";
 import { useToast } from "@/hooks/use-toast";
@@ -14,9 +14,10 @@ import { Account, Transaction, CreditBill, Category } from "@/types"; // Importa
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, endOfMonth, isWithinInterval, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { formatCurrency } from "@/lib/formatters"; // CORREÇÃO: Importar formatCurrency
 import { cn } from "@/lib/utils";
 // Precisamos das categorias para encontrar a de "Pagamento de Fatura"
-import { useCategories } from "@/hooks/useCategories"; 
+import { useCategories } from "@/hooks/useCategories";
 import { createDateFromString } from "@/lib/dateUtils";
 
 export function CreditBillsPage() {
@@ -28,10 +29,10 @@ export function CreditBillsPage() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedBill, setSelectedBill] = useState<CreditBill | null>(null);
-  const [loading, setLoading] = useState(true);
-  
+  const [loading, setLoading] = useState(true); // Estado de carregamento para a página
+
   // Date filter states
-  const [dateFilter, setDateFilter] = useState<"all" | "current_month" | "month_picker" | "custom">("current_month");
+  const [dateFilter, setDateFilter] = useState<"all" | "current_month" | "month_picker" | "custom">("current_month"); // Filtro de período
   const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>(undefined);
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>(undefined);
@@ -39,13 +40,13 @@ export function CreditBillsPage() {
   const [endDatePickerOpen, setEndDatePickerOpen] = useState(false);
   
   const { toast } = useToast();
-  // Hook para buscar categorias (necessário para o pagamento)
+  // Hook para buscar categorias (necessário para o pagamento de fatura)
   const { categories, isLoading: categoriesLoading } = useCategories();
 
   useEffect(() => {
     loadData();
     
-    // Configurar atualização automática
+    // Configurar atualização automática (ex: a cada minuto)
     const interval = setInterval(() => {
       loadData();
     }, 60000); // 60 segundos
@@ -68,11 +69,13 @@ export function CreditBillsPage() {
 
       if (accountsError) throw accountsError;
       
-      // Converte saldos para centavos
+      // CORREÇÃO: Supabase retorna BIGINT como number (se dentro do safe integer) ou string.
+      // Se já é number (em centavos), não precisa de parseFloat * 100.
+      // Se é string (em centavos), Number() converte.
       const formattedAccounts = accountsData.map(acc => ({
         ...acc,
-        balance: Math.round(parseFloat(acc.balance) * 100),
-        limit_amount: acc.limit_amount ? Math.round(parseFloat(acc.limit_amount) * 100) : undefined
+        balance: Number(acc.balance), // Assume que o DB já retorna em centavos
+        limit_amount: acc.limit_amount ? Number(acc.limit_amount) : undefined
       }));
       setAccounts(formattedAccounts || []);
 
@@ -91,10 +94,10 @@ export function CreditBillsPage() {
         // Garante data local (o banco retorna 'YYYY-MM-DD')
         due_date: createDateFromString(bill.due_date),
         closing_date: createDateFromString(bill.closing_date),
-        start_date: createDateFromString(bill.start_date),
-        // Transforma valores de string (decimal) para números (centavos)
-        total_amount: Math.round(parseFloat(bill.total_amount) * 100),
-        paid_amount: Math.round(parseFloat(bill.paid_amount) * 100),
+        start_date: createDateFromString(bill.start_date), // Assume que o DB já retorna em centavos
+        // CORREÇÃO: Valores já devem vir em centavos do DB, apenas converte para Number
+        total_amount: Number(bill.total_amount),
+        paid_amount: Number(bill.paid_amount),
         // A API de 'credit_bills' não retorna transações, 
         // o 'CreditBillDetailsModal' deve buscar se necessário.
         transactions: [] 
@@ -112,16 +115,6 @@ export function CreditBillsPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // REMOVIDO: A função 'generateCreditBills' foi deletada. O SQL agora faz isso.
-
-  const formatCurrency = (value: number) => {
-    // CORREÇÃO: O valor agora está em CENTAVOS, como no resto da aplicação
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value / 100);
   };
 
   const formatDate = (date: Date) => {
@@ -201,7 +194,7 @@ export function CreditBillsPage() {
       if (!userData.user) throw new Error("User not authenticated");
 
       // 1. Encontrar a categoria "Pagamento de Fatura"
-      const paymentCategory = categories.find(c => c.name.toLowerCase() === 'pagamento de fatura');
+      const paymentCategory = categories.find(c => c.name.toLowerCase() === 'pagamento de fatura' && (c.type === 'expense' || c.type === 'both'));
       if (!paymentCategory) {
         throw new Error("Categoria 'Pagamento de Fatura' não encontrada. Adicione-a nas Configurações.");
       }
@@ -215,8 +208,8 @@ export function CreditBillsPage() {
           user_id: userData.user.id,
           account_id: bankAccountId,      // De: Conta Bancária
           to_account_id: creditAccountId, // Para: Cartão de Crédito
-          description: `Pagamento Fatura ${accounts.find(acc => acc.id === creditAccountId)?.name || ''}`,
-          amount: -Math.abs(amountInCents / 100), // Envia como DECIMAL para o DB
+          description: `Pagamento Fatura ${accounts.find(acc => acc.id === creditAccountId)?.name || ''}`, // CORREÇÃO: amount já está em centavos
+          amount: -Math.abs(amountInCents),
           type: 'transfer',
           date: date.toISOString().split('T')[0],
           status: 'completed',
@@ -230,10 +223,10 @@ export function CreditBillsPage() {
         const newPaidAmount = selectedBill.paid_amount + amountInCents;
         const newStatus = newPaidAmount >= selectedBill.total_amount ? 'paid' : 'partial';
         
-        await supabase
+        await supabase // CORREÇÃO: paid_amount já está em centavos
           .from('credit_bills')
           .update({ 
-            paid_amount: newPaidAmount / 100, // Envia DECIMAL
+            paid_amount: newPaidAmount,
             status: newStatus
           })
           .eq('id', selectedBill.id);
@@ -258,10 +251,10 @@ export function CreditBillsPage() {
 
       if (updatedAccountsError) throw updatedAccountsError;
 
-      const updatedAccounts = updatedAccountsData.map(acc => ({
+      const updatedAccounts = updatedAccountsData.map(acc => ({ // CORREÇÃO: Valores já devem vir em centavos
         ...acc,
-        balance: Math.round(parseFloat(acc.balance) * 100),
-        limit_amount: acc.limit_amount ? Math.round(parseFloat(acc.limit_amount) * 100) : undefined
+        balance: Number(acc.balance),
+        limit_amount: acc.limit_amount ? Number(acc.limit_amount) : undefined
       }));
 
       const creditAccount = updatedAccounts.find(acc => acc.id === creditAccountId);

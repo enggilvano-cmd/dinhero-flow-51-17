@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    type TEXT NOT NULL, -- 'checking', 'savings', 'credit_card', 'investment'
+    type TEXT NOT NULL, -- Consider using an ENUM for better type safety: 'checking', 'savings', 'credit', 'investment'
     initial_balance BIGINT NOT NULL DEFAULT 0, -- Em centavos
     balance BIGINT NOT NULL DEFAULT 0,         -- Em centavos (calculado por trigger)
     currency TEXT NOT NULL DEFAULT 'BRL',
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS categories (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    type TEXT NOT NULL, -- 'expense' ou 'income'
+    type TEXT NOT NULL, -- Consider using an ENUM for better type safety: 'expense', 'income'
     color TEXT,
     icon TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

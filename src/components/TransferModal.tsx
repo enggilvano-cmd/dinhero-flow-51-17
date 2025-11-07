@@ -1,26 +1,24 @@
 import { useState, useMemo } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"; // CORREÇÃO: Adicionar DialogTrigger
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { currencyStringToCents } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createDateFromString, getTodayString } from "@/lib/dateUtils";
-import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast"; // Textarea não está sendo usado, pode ser removido se não for planejado.
-import { formatCurrency, getAvailableBalance } from "@/lib/formatters";
+import { useToast } from "@/hooks/use-toast";
+import { formatCurrency, getAvailableBalance, currencyStringToCents } from "@/lib/formatters"; // Import atualizado
 import { ArrowRight } from "lucide-react";
 import { AccountBalanceDetails } from "./AccountBalanceDetails";
-import { useAccountStore } from "@/stores/AccountStore";
+import { useAccountStore } from "@/stores/AccountStore"; // Manter este import
 import { Account } from "@/types";
 
 interface TransferModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  children: React.ReactNode; // Para o trigger
   onTransfer: (fromAccountId: string, toAccountId: string, amountInCents: number, date: Date) => Promise<{ fromAccount: Account, toAccount: Account }>;
 }
 
-export function TransferModal({ open, onOpenChange, onTransfer }: TransferModalProps) {
+export function TransferModal({ children, onTransfer }: TransferModalProps) {
+  const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
     fromAccountId: "",
     toAccountId: "",
@@ -28,7 +26,7 @@ export function TransferModal({ open, onOpenChange, onTransfer }: TransferModalP
     date: getTodayString()
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { toast } = useToast();
+  const { toast } = useToast(); // CORREÇÃO: Importar useToast aqui
   const accounts = useAccountStore((state) => state.accounts);
   const updateAccountsInStore = useAccountStore((state) => state.updateAccounts);
 
@@ -121,7 +119,7 @@ export function TransferModal({ open, onOpenChange, onTransfer }: TransferModalP
         date: getTodayString()
       });
 
-      onOpenChange(false);
+      setOpen(false); // CORREÇÃO: Fechar o modal
     } catch (error) {
       // A função onTransfer deve lançar um erro em caso de falha para este bloco ser ativado.
       console.error("Transfer failed:", error);
@@ -131,8 +129,12 @@ export function TransferModal({ open, onOpenChange, onTransfer }: TransferModalP
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {children}
+      </DialogTrigger>
+
+      <DialogContent className="sm:max-w-[500px]"> 
         <DialogHeader>
           <DialogTitle>Nova Transferência</DialogTitle>
         </DialogHeader>
@@ -243,8 +245,8 @@ export function TransferModal({ open, onOpenChange, onTransfer }: TransferModalP
           )}
 
           <div className="flex gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
-              Cancelar
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1">
+              Cancelar {/* CORREÇÃO: onOpenChange(false) */}
             </Button>
             <Button 
               type="submit" 

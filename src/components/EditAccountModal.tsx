@@ -2,7 +2,7 @@ import { useState, useEffect, FormEvent } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { currencyStringToCents } from "@/lib/utils";
+import { currencyStringToCents } from "@/lib/formatters"; // Import atualizado
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -13,7 +13,7 @@ import { useAccountStore } from "@/stores/AccountStore";
 interface EditAccountModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onEditAccount: (account: Account) => Promise<void>;
+  onEditAccount: (account: Account) => Promise<Account>;
   account: Account | null;
 }
 
@@ -129,10 +129,10 @@ export function EditAccountModal({ open, onOpenChange, onEditAccount, account }:
 
     setIsSubmitting(true);
     try {
-      await onEditAccount(updatedAccount);
+      const resultAccount = await onEditAccount(updatedAccount);
 
       // Atualiza a conta no store global
-      updateAccountInStore(updatedAccount);
+      updateAccountInStore(resultAccount);
 
       toast({
         title: "Sucesso",

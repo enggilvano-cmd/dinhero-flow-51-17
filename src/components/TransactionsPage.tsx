@@ -91,18 +91,77 @@ export function TransactionsPage({
   const [sortBy, setSortBy] = useState<"date" | "amount">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [importModalOpen, setImportModalOpen] = useState(false);
+
+  // Memoize filtered transactions
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(transaction => {
+      // Search filter
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = !searchTerm || 
+        transaction.description?.toLowerCase().includes(searchLower) ||
+        getAccountName(transaction.account_id)?.toLowerCase().includes(searchLower) ||
+        getCategoryName(transaction.category_id)?.toLowerCase().includes(searchLower);
+
+      if (!matchesSearch) return false;
+
+      // Type filter
+      if (filterType !== "all" && transaction.type !== filterType) return false;
+
+      // Account filter
+      if (filterAccount !== "all" && transaction.account_id !== filterAccount) return false;
+
+      // Category filter
+      if (filterCategory !== "all" && transaction.category_id !== filterCategory) return false;
+
+      // Status filter
+      if (filterStatus !== "all" && transaction.status !== filterStatus) return false;
+
+      // Date filter
+      if (dateFilter !== "all") {
+        const transactionDate = typeof transaction.date === "string" 
+          ? createDateFromString(transaction.date)
+          : transaction.date;
+
+        if (dateFilter === "current_month") {
+          const now = new Date();
+          const startDate = startOfMonth(now);
+          const endDate = endOfMonth(now);
+          if (!isWithinInterval(transactionDate, { start: startDate, end: endDate })) return false;
+        } else if (dateFilter === "month_picker") {
+          const startDate = startOfMonth(selectedMonth);
+          const endDate = endOfMonth(selectedMonth);
+          if (!isWithinInterval(transactionDate, { start: startDate, end: endDate })) return false;
+        } else if (dateFilter === "custom") {
+          if (customStartDate && transactionDate < customStartDate) return false;
+          if (customEndDate && transactionDate > customEndDate) return false;
+        }
+      }
+
+      return true;
+    }).sort((a, b) => {
+      const aValue = sortBy === "date" ? new Date(a.date).getTime() : a.amount;
+      const bValue = sortBy === "date" ? new Date(b.date).getTime() : b.amount;
+      return sortOrder === "asc" ? aValue - bValue : bValue - aValue;
+    });
+  }, [
+    transactions,
+    searchTerm,
+    filterType,
+    filterAccount,
+    filterCategory,
+    filterStatus,
+    dateFilter,
+    selectedMonth,
+    customStartDate,
+    customEndDate,
+    sortBy,
+    sortOrder
+  ]);
   
   const { toast } = useToast();
   const { isMobile, isTablet } = useChartResponsive();
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
-  };
-
-  const getTransactionIcon = (type: string) => {
+  const getTransactionIcon = (type: string) => { // formatCurrency é importado no topo
     switch (type) {
       case "income": return <TrendingUp className="h-4 w-4 text-success" />;
       case "expense": return <TrendingDown className="h-4 w-4 text-destructive" />;

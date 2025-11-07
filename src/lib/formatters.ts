@@ -29,48 +29,45 @@ export const formatCurrency = (
   }).format(amount)
 }
 
+// NOTA DO PROGRAMADOR:
+// Esta função foi movida de `src/lib/utils.ts` para centralizar a lógica de formatação/parsing de moeda.
 /**
  * Converte uma string de moeda formatada (ou um número) para um inteiro em centavos.
- * @param currencyInput A string (ex: "R$ 10,50" ou "10.50" ou "10,50")
- * @returns O valor em centavos (ex: 1050)
+ * Esta versão é mais robusta e lida com prefixos (R$), espaços e múltiplos separadores.
+ * @returns {number} O valor em centavos como um inteiro, ou NaN se a entrada for inválida.
  */
-export const parseCurrencyToCents = (
-  currencyInput: string | number
-): number => {
-  if (typeof currencyInput === 'number') {
-    // Assume que o número já é a unidade principal (ex: 10.50)
-    return Math.round(currencyInput * 100)
+export function currencyStringToCents(value: string | number): number {
+  if (typeof value === 'number') {
+    // Arredonda para garantir que estamos trabalhando com 2 casas decimais
+    return Math.round(value * 100);
   }
 
-  if (typeof currencyInput !== 'string' || !currencyInput) {
-    return 0
+  if (typeof value !== 'string' || value.trim() === '') {
+    return NaN;
   }
 
   // 1. Remove tudo que não for dígito, vírgula ou sinal de menos
-  let normalized = currencyInput.replace(/[^\d,-]/g, '')
+  // Remove prefixos (R$), espaços e todos os separadores de milhar (pontos).
+  // Substitui a última vírgula por um ponto para o parseFloat.
+  const cleanedValue = value.trim().replace(/R\$\s*/, '');
 
-  // 2. Substitui a vírgula decimal brasileira por ponto
-  normalized = normalized.replace(',', '.')
+  // Verifica se há vírgula como separador decimal
+  const lastCommaIndex = cleanedValue.lastIndexOf(',');
+  const lastDotIndex = cleanedValue.lastIndexOf('.');
 
-  // 3. Remove pontos de milhar (se houver, ex: "1.000,50" virou "1.000.50")
-  // Este regex remove o último ponto (decimal) e depois remove os de milhar
-  const parts = normalized.split('.')
-  let finalString = normalized
-  if (parts.length > 1) {
-    const integerPart = parts.slice(0, -1).join('')
-    const decimalPart = parts[parts.length - 1]
-    finalString = `${integerPart}.${decimalPart}`
+  let sanitizedValue = cleanedValue.replace(/\./g, ''); // Remove todos os pontos
+  if (lastCommaIndex > lastDotIndex) {
+    sanitizedValue = sanitizedValue.replace(',', '.'); // Substitui a vírgula decimal por ponto
   }
 
-  // 4. Converte para float
-  const floatValue = parseFloat(finalString)
-
-  if (isNaN(floatValue)) {
-    return 0
+  // 2. Converte para número e valida.
+  const numericValue = parseFloat(sanitizedValue.replace(/[^0-9.-]/g, ''));
+  if (isNaN(numericValue)) {
+    return NaN;
   }
 
-  // 5. Multiplica por 100 e arredonda para obter os centavos inteiros
-  return Math.round(floatValue * 100)
+  // 3. Converte para centavos e arredonda para evitar erros de ponto flutuante.
+  return Math.round(numericValue * 100);
 }
 
 /**

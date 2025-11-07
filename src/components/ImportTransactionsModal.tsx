@@ -11,6 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 import { format, parse, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { formatCurrency } from "@/lib/formatters"; // CORREÇÃO: Importa a função de formatação
+import { currencyStringToCents } from "@/lib/formatters"; // Importa a função de conversão
 
 interface Account {
   id: string;
@@ -287,7 +289,7 @@ export function ImportTransactionsModal({
       .filter(t => t.isValid && t.parsedType && t.accountId && t.parsedDate && t.parsedStatus)
       .map(t => ({
         description: t.descricao,
-        amount: t.valor,
+        amount: currencyStringToCents(t.valor), // CORREÇÃO: Converte o valor para centavos
         category: t.categoria, // Manter category como string - será tratado no backend
         type: t.parsedType as 'income' | 'expense' | 'transfer',
         account_id: t.accountId as string,

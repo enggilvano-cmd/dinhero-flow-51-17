@@ -2,30 +2,6 @@ import { create } from 'zustand'
 import { supabase } from '@/integrations/supabase/client'
 import { Account, Category, Transaction } from '@/types'
 
-interface CreateTransaction {
-  description: string
-  amount: number
-  date: string
-  type: 'income' | 'expense' | 'transfer'
-  category_id: string
-  account_id: string
-  status?: 'pending' | 'completed'
-  installments?: number
-}
-
-interface CreateTransfer {
-  fromAccountId: string
-  toAccountId: string
-  amount: number
-  date: string
-}
-
-interface CreatePayment {
-  amount: number
-  accountId: string
-  date: Date
-}
-
 // Tipos do Supabase
 interface DBAccount {
   id: string
@@ -69,9 +45,23 @@ interface DBTransaction {
   updated_at: string
 }
 
-// Interface para callbacks de sucesso opcionais
-interface SuccessCallbacks {
-  onSuccess?: () => void
+interface CreateTransaction {
+  description: string
+  amount: number
+  date: string | Date
+  type: 'income' | 'expense' | 'transfer'
+  category_id: string
+  account_id: string
+  status?: 'pending' | 'completed'
+  installments?: number
+  to_account_id?: string
+}
+
+interface CreateTransfer {
+  fromAccountId: string
+  toAccountId: string
+  amount: number
+  date: string
 }
 
 // Tipos para o estado
@@ -88,22 +78,22 @@ export interface AccountStoreState {
   loadTransactions: () => Promise<void>
   
   // Funções de contas
-  addAccount: (account: Omit<DBAccount, 'id' | 'created_at' | 'updated_at'> & SuccessCallbacks) => Promise<void>
-  updateAccount: (account: Partial<DBAccount> & { id: string } & SuccessCallbacks) => Promise<void>
-  deleteAccount: (id: string, callbacks?: SuccessCallbacks) => Promise<void>
-  createPayment: (params: CreatePayment & SuccessCallbacks) => Promise<void>
-  createTransfer: (transfer: CreateTransfer & SuccessCallbacks) => Promise<void>
+  addAccount: (account: Omit<DBAccount, 'created_at' | 'updated_at'>) => Promise<void>
+  updateAccount: (account: Partial<DBAccount> & { id: string }) => Promise<void>
+  deleteAccount: (id: string) => Promise<void>
+  createPayment: (params: { amount: number, accountId: string, date: Date }) => Promise<void>
+  createTransfer: (transfer: CreateTransfer) => Promise<void>
   
   // Funções de categorias  
-  addCategory: (category: Omit<DBCategory, 'id' | 'created_at' | 'updated_at'> & SuccessCallbacks) => Promise<void>
-  updateCategory: (category: Partial<DBCategory> & { id: string } & SuccessCallbacks) => Promise<void>
-  deleteCategory: (id: string, callbacks?: SuccessCallbacks) => Promise<void>
+  addCategory: (category: Omit<DBCategory, 'created_at' | 'updated_at'>) => Promise<void>
+  updateCategory: (category: Partial<DBCategory> & { id: string }) => Promise<void>
+  deleteCategory: (id: string) => Promise<void>
   
   // Funções de transações
-  createTransaction: (tx: CreateTransaction & SuccessCallbacks) => Promise<void>
-  updateTransaction: (tx: Partial<DBTransaction> & { id: string } & SuccessCallbacks) => Promise<void>
-  deleteTransaction: (id: string, callbacks?: SuccessCallbacks) => Promise<void>
-  importTransactions: (transactions: Omit<DBTransaction, 'id' | 'created_at' | 'updated_at'>[], callbacks?: SuccessCallbacks) => Promise<void>
+  createTransaction: (tx: CreateTransaction) => Promise<void>
+  updateTransaction: (tx: Partial<DBTransaction> & { id: string }) => Promise<void>
+  deleteTransaction: (id: string) => Promise<void>
+  importTransactions: (transactions: Omit<DBTransaction, 'created_at' | 'updated_at' | 'id'>[]) => Promise<void>
 }
 
 export const useAccountStore = create<AccountStoreState>((set, get) => ({
@@ -115,7 +105,7 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
 
   /**
    * Carrega contas do banco de dados.
-   * Os saldos (balance) já virão como BIGINT (centavos).
+   * Os saldos (balance, initial_balance) já virão como BIGINT (centavos).
    * O frontend TypeScript os tratará como 'number'.
    */
   loadAccounts: async () => {
@@ -138,7 +128,7 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
         due_date: acc.due_date || undefined,
         closing_date: acc.closing_date || undefined,
         color: acc.color,
-        user_id: acc.user_id,
+        user_id: acc.user_id
       }))
 
       set({ accounts })
@@ -156,13 +146,23 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
   loadCategories: async () => {
     set({ loading: true, error: null })
     try {
-      const { data, error } = await supabase
+      const { data: dbCategories, error } = await supabase
         .from('categories')
         .select('*')
         .order('name')
 
       if (error) throw error
-      set({ categories: data || [] })
+      
+      // Converter tipos do DB para tipos da aplicação
+      const categories: Category[] = (dbCategories || []).map(cat => ({
+        id: cat.id,
+        name: cat.name,
+        type: cat.type,
+        color: cat.color,
+        user_id: cat.user_id
+      }))
+
+      set({ categories })
     } catch (error: any) {
       console.error('Erro ao carregar categorias:', error.message)
       set({ error: error.message })
@@ -177,13 +177,31 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
   loadTransactions: async () => {
     set({ loading: true, error: null })
     try {
-      const { data, error } = await supabase
+      const { data: dbTransactions, error } = await supabase
         .from('transactions')
         .select('*')
         .order('date', { ascending: false })
 
       if (error) throw error
-      set({ transactions: data || [] })
+      
+      // Converter tipos do DB para tipos da aplicação
+      const transactions: Transaction[] = (dbTransactions || []).map(tx => ({
+        id: tx.id,
+        description: tx.description,
+        amount: tx.amount,
+        date: tx.date,
+        type: tx.type,
+        category_id: tx.category_id || '',
+        account_id: tx.account_id,
+        status: tx.status,
+        user_id: tx.user_id,
+        to_account_id: tx.to_account_id,
+        installments: tx.installments,
+        current_installment: tx.current_installment,
+        parent_transaction_id: tx.parent_transaction_id
+      }))
+
+      set({ transactions })
     } catch (error: any) {
       console.error('Erro ao carregar transações:', error.message)
       set({ error: error.message })
@@ -192,146 +210,16 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
     }
   },
 
-  // Funções de Account
-  addAccount: async ({ onSuccess, ...account }) => {
+  /**
+   * Cria uma nova transação.
+   */
+  createTransaction: async (tx: CreateTransaction) => {
     try {
-      const { error } = await supabase
-        .from('accounts')
-        .insert(account)
-
-      if (error) throw error
-      onSuccess?.()
-      get().loadAccounts()
-    } catch (error: any) {
-      console.error('Erro ao adicionar conta:', error.message)
-      throw error
-    }
-  },
-
-  updateAccount: async ({ id, onSuccess, ...updates }) => {
-    try {
-      const { error } = await supabase
-        .from('accounts')
-        .update(updates)
-        .eq('id', id)
-
-      if (error) throw error
-      onSuccess?.()
-      get().loadAccounts()
-    } catch (error: any) {
-      console.error('Erro ao atualizar conta:', error.message)
-      throw error
-    }
-  },
-
-  deleteAccount: async (id: string, { onSuccess } = {}) => {
-    try {
-      const { error } = await supabase
-        .from('accounts')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
-      onSuccess?.()
-      get().loadAccounts()
-    } catch (error: any) {
-      console.error('Erro ao excluir conta:', error.message)
-      throw error
-    }
-  },
-
-  createPayment: async ({ amount, accountId, date, onSuccess }) => {
-    try {
-      const { error } = await supabase.rpc('create_credit_payment', {
-        p_amount: amount,
-        p_account_id: accountId,
-        p_date: date.toISOString().split('T')[0]
+      const { error } = await supabase.from('transactions').insert({
+        ...tx,
+        date: typeof tx.date === 'object' ? tx.date.toISOString().split('T')[0] : tx.date
       })
-
       if (error) throw error
-      onSuccess?.()
-      get().loadAccounts()
-    } catch (error: any) {
-      console.error('Erro ao criar pagamento:', error.message)
-      throw error
-    }
-  },
-
-  createTransfer: async ({ fromAccountId, toAccountId, amount, date, onSuccess }) => {
-    try {
-      const { error } = await supabase.rpc('create_transfer_transaction', {
-        p_from_account_id: fromAccountId,
-        p_to_account_id: toAccountId,
-        p_amount: amount,
-        p_date: date
-      })
-
-      if (error) throw error
-      onSuccess?.()
-      get().loadAccounts()
-    } catch (error: any) {
-      console.error('Erro ao criar transferência:', error.message)
-      throw error
-    }
-  },
-
-  // Funções de Category
-  addCategory: async ({ onSuccess, ...category }) => {
-    try {
-      const { error } = await supabase
-        .from('categories')
-        .insert(category)
-
-      if (error) throw error
-      onSuccess?.()
-      get().loadCategories()
-    } catch (error: any) {
-      console.error('Erro ao adicionar categoria:', error.message)
-      throw error
-    }
-  },
-
-  updateCategory: async ({ id, onSuccess, ...updates }) => {
-    try {
-      const { error } = await supabase
-        .from('categories')
-        .update(updates)
-        .eq('id', id)
-
-      if (error) throw error
-      onSuccess?.()
-      get().loadCategories()
-    } catch (error: any) {
-      console.error('Erro ao atualizar categoria:', error.message)
-      throw error
-    }
-  },
-
-  deleteCategory: async (id: string, { onSuccess } = {}) => {
-    try {
-      const { error } = await supabase
-        .from('categories')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
-      onSuccess?.()
-      get().loadCategories()
-    } catch (error: any) {
-      console.error('Erro ao excluir categoria:', error.message)
-      throw error
-    }
-  },
-
-  // Funções de Transaction
-  createTransaction: async ({ onSuccess, ...transaction }) => {
-    try {
-      const { error } = await supabase
-        .from('transactions')
-        .insert(transaction)
-
-      if (error) throw error
-      onSuccess?.()
       get().loadTransactions()
       get().loadAccounts()
     } catch (error: any) {
@@ -340,15 +228,146 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
     }
   },
 
-  updateTransaction: async ({ id, onSuccess, ...updates }) => {
+  /**
+   * Cria uma transferência
+   */
+  createTransfer: async (transfer: CreateTransfer) => {
+    try {
+      const { error } = await supabase.functions.invoke('create-transfer', {
+        body: {
+          fromAccountId: transfer.fromAccountId,
+          toAccountId: transfer.toAccountId,
+          amount: transfer.amount,
+          date: transfer.date
+        }
+      })
+
+      if (error) throw error
+
+      // Recarrega as contas para atualizar os saldos
+      get().loadAccounts()
+      get().loadTransactions()
+    } catch (error: any) {
+      console.error('Erro ao criar transferência:', error.message)
+      throw error
+    }
+  },
+
+  // Funções de conta
+  addAccount: async (account: Omit<DBAccount, 'created_at' | 'updated_at'>) => {
+    try {
+      const { error } = await supabase.from('accounts').insert(account)
+      if (error) throw error
+      get().loadAccounts()
+    } catch (error: any) {
+      console.error('Erro ao adicionar conta:', error.message)
+      throw error
+    }
+  },
+
+  updateAccount: async (account: Partial<DBAccount> & { id: string }) => {
     try {
       const { error } = await supabase
-        .from('transactions')
-        .update(updates)
+        .from('accounts')
+        .update(account)
+        .eq('id', account.id)
+
+      if (error) throw error
+      get().loadAccounts()
+    } catch (error: any) {
+      console.error('Erro ao atualizar conta:', error.message)
+      throw error
+    }
+  },
+
+  deleteAccount: async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('accounts')
+        .delete()
         .eq('id', id)
 
       if (error) throw error
-      onSuccess?.()
+      get().loadAccounts()
+    } catch (error: any) {
+      console.error('Erro ao excluir conta:', error.message)
+      throw error
+    }
+  },
+
+  createPayment: async ({ amount, accountId, date }: { amount: number, accountId: string, date: Date }) => {
+    try {
+      const { error } = await supabase.functions.invoke('create-payment', {
+        body: {
+          amount,
+          accountId,
+          date: date.toISOString().split('T')[0]
+        }
+      })
+
+      if (error) throw error
+      get().loadAccounts()
+    } catch (error: any) {
+      console.error('Erro ao criar pagamento:', error.message)
+      throw error
+    }
+  },
+
+  // Funções de categorias
+  addCategory: async (category: Omit<DBCategory, 'created_at' | 'updated_at'>) => {
+    try {
+      const { error } = await supabase.from('categories').insert(category)
+      if (error) throw error
+      get().loadCategories()
+    } catch (error: any) {
+      console.error('Erro ao adicionar categoria:', error.message)
+      throw error
+    }
+  },
+
+  updateCategory: async (category: Partial<DBCategory> & { id: string }) => {
+    try {
+      const { error } = await supabase
+        .from('categories')
+        .update(category)
+        .eq('id', category.id)
+
+      if (error) throw error
+      get().loadCategories()
+    } catch (error: any) {
+      console.error('Erro ao atualizar categoria:', error.message)
+      throw error
+    }
+  },
+
+  deleteCategory: async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('categories')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      get().loadCategories()
+    } catch (error: any) {
+      console.error('Erro ao excluir categoria:', error.message)
+      throw error
+    }
+  },
+
+  // Funções de transações
+  updateTransaction: async (tx: Partial<DBTransaction> & { id: string }) => {
+    try {
+      if (tx.date && tx.date instanceof Date) {
+        tx.date = tx.date.toISOString().split('T')[0]
+      }
+
+      const { error } = await supabase
+        .from('transactions')
+        .update(tx)
+        .eq('id', tx.id)
+
+      if (error) throw error
       get().loadTransactions()
       get().loadAccounts()
     } catch (error: any) {
@@ -357,7 +376,7 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
     }
   },
 
-  deleteTransaction: async (id: string, { onSuccess } = {}) => {
+  deleteTransaction: async (id: string) => {
     try {
       const { error } = await supabase
         .from('transactions')
@@ -365,7 +384,6 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
         .eq('id', id)
 
       if (error) throw error
-      onSuccess?.()
       get().loadTransactions()
       get().loadAccounts()
     } catch (error: any) {
@@ -374,19 +392,23 @@ export const useAccountStore = create<AccountStoreState>((set, get) => ({
     }
   },
 
-  importTransactions: async (transactions, { onSuccess } = {}) => {
+  importTransactions: async (transactions: Omit<DBTransaction, 'created_at' | 'updated_at' | 'id'>[]) => {
     try {
+      const formattedTransactions = transactions.map(tx => ({
+        ...tx,
+        date: typeof tx.date === 'object' ? tx.date.toISOString().split('T')[0] : tx.date
+      }))
+
       const { error } = await supabase
         .from('transactions')
-        .insert(transactions)
+        .insert(formattedTransactions)
 
       if (error) throw error
-      onSuccess?.()
       get().loadTransactions()
       get().loadAccounts()
     } catch (error: any) {
       console.error('Erro ao importar transações:', error.message)
       throw error
     }
-  }
+  },
 }))

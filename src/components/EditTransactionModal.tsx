@@ -16,16 +16,14 @@ import { useCategories } from "@/hooks/useCategories";
 import { createDateFromString } from "@/lib/dateUtils";
 import { InstallmentEditScopeDialog, EditScope } from "./InstallmentEditScopeDialog";
 import { useAccountStore } from "@/stores/AccountStore";
-// CORREÇÃO: Importa de './CurrencyInput' (sem '/forms/')
-// Note que este modal não usa react-hook-form, então
-// a importação de CurrencyInput não é necessária aqui,
-// mas a importação de PatternFormat é.
+// CORREÇÃO: Importa de '@/components/CurrencyInput' (o componente CurrencyInput não é usado diretamente, mas o comentário estava incorreto)
 import { PatternFormat } from "react-number-format";
 
 interface EditTransactionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onEditTransaction: (transaction: Transaction, editScope?: EditScope) => void;
+  // CORREÇÃO: Remover accounts, pois são obtidas do store
   transaction: Transaction | null;
 }
 

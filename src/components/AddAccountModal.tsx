@@ -1,7 +1,7 @@
 import { useState, FormEvent } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { currencyStringToCents } from "@/lib/utils";
+import { currencyStringToCents } from "@/lib/formatters"; // Import atualizado
 import { Input, InputProps } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,8 +13,8 @@ import { useAccountStore } from "@/stores/AccountStore";
 interface AddAccountModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // A função agora retorna a conta criada para podermos adicionar ao store
-  onAddAccount: (account: Omit<Account, "id" | "user_id">) => Promise<Account>;
+  // onAddAccount agora é uma prop do modal, não do store
+  onAddAccount: (account: Omit<Account, "id" | "user_id" | "created_at" | "updated_at">) => Promise<Account>;
 }
 
 export function AddAccountModal({ open, onOpenChange, onAddAccount }: AddAccountModalProps) {
@@ -47,7 +47,8 @@ export function AddAccountModal({ open, onOpenChange, onAddAccount }: AddAccount
       return;
     }
 
-      
+    // CORREÇÃO: Declarar rawBalanceInCents antes de seu uso
+    const rawBalanceInCents = currencyStringToCents(formData.balance);
     if (isNaN(rawBalanceInCents)) {
       toast({
         title: "Erro",

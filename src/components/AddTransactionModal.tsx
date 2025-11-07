@@ -38,10 +38,20 @@ import { ptBR } from 'date-fns/locale'
 import { useAccountStore } from '@/stores/AccountStore'
 import { Switch } from './ui/switch'
 import { Label } from './ui/label'
-// CORREÇÃO: Importa de './CurrencyInput' (sem '/forms/')
+// CORREÇÃO: Importa de '@/components/CurrencyInput'
 import { CurrencyInput } from './CurrencyInput'
+import { useToast } from '@/hooks/use-toast' // CORREÇÃO: Importar useToast
 
-// Schema de validação do Zod
+// CORREÇÃO: Remover props desnecessárias, o modal é auto-contido
+interface AddTransactionModalProps {
+  // open: boolean;
+  // onOpenChange: (open: boolean) => void;
+  // onAddTransaction: (transaction: any) => Promise<void>;
+  // onAddInstallmentTransactions: (transactions: any[]) => Promise<void>;
+  // accounts: Account[]; // Contas são obtidas do store
+}
+
+// Schema de validação do Zod (mantido)
 const formSchema = z.object({
   type: z.enum(['expense', 'income']),
   description: z.string().min(1, 'A descrição é obrigatória.'),
@@ -54,9 +64,10 @@ const formSchema = z.object({
   isPaid: z.boolean(),
 })
 
-export const AddTransactionModal: React.FC = () => {
+export const AddTransactionModal: React.FC<AddTransactionModalProps> = () => {
   const [isOpen, setIsOpen] = React.useState(false)
 
+  const { toast } = useToast(); // CORREÇÃO: Usar useToast aqui
   const {
     accounts,
     categories,
@@ -93,20 +104,25 @@ export const AddTransactionModal: React.FC = () => {
 
     const dateString = format(values.date, 'yyyy-MM-dd')
 
-    await createTransaction(
-      {
-        description: values.description,
-        amount: amountInCents,
-        date: dateString,
-        account_id: values.accountId,
-        category_id: values.categoryId,
-        is_paid: values.isPaid,
-      },
-      () => {
-        setIsOpen(false)
-        form.reset()
-      }
-    )
+    try {
+      await createTransaction(
+        {
+          description: values.description,
+          amount: amountInCents,
+          date: dateString,
+          account_id: values.accountId,
+          category_id: values.categoryId,
+          is_paid: values.isPaid,
+        },
+        () => {
+          setIsOpen(false)
+          form.reset()
+        }
+      )
+      toast({ title: 'Sucesso', description: 'Transação adicionada com sucesso!' });
+    } catch (error: any) {
+      toast({ title: 'Erro', description: error.message || 'Erro ao adicionar transação.', variant: 'destructive' });
+    }
   }
 
   return (
