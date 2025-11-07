@@ -10,14 +10,18 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CreditPaymentModal } from "./CreditPaymentModal";
 import { CreditBillDetailsModal } from "./CreditBillDetailsModal";
 import { useToast } from "@/hooks/use-toast";
-import { Account, Transaction, CreditBill } from "@/types";
+import { Account, Transaction, CreditBill, Category } from "@/types"; // Importa tipos
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, endOfMonth, isWithinInterval, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+// Precisamos das categorias para encontrar a de "Pagamento de Fatura"
+import { useCategories } from "@/hooks/useCategories"; 
+import { createDateFromString } from "@/lib/dateUtils";
 
 export function CreditBillsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  // CORREÇÃO: Este estado agora armazena faturas REAIS do banco
   const [creditBills, setCreditBills] = useState<CreditBill[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
@@ -35,44 +39,67 @@ export function CreditBillsPage() {
   const [endDatePickerOpen, setEndDatePickerOpen] = useState(false);
   
   const { toast } = useToast();
+  // Hook para buscar categorias (necessário para o pagamento)
+  const { categories, isLoading: categoriesLoading } = useCategories();
 
   useEffect(() => {
     loadData();
     
-    // Configurar atualização automática a cada 60 segundos
+    // Configurar atualização automática
     const interval = setInterval(() => {
       loadData();
     }, 60000); // 60 segundos
     
-    // Limpar o intervalo quando o componente for desmontado
     return () => clearInterval(interval);
   }, []);
 
   const loadData = async () => {
     try {
       setLoading(true);
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) throw new Error("Usuário não autenticado");
       
-      // Load accounts
+      // 1. Load accounts
       const { data: accountsData, error: accountsError } = await supabase
         .from('accounts')
         .select('*')
+        .eq('user_id', userData.user.id)
         .order('name');
 
       if (accountsError) throw accountsError;
       setAccounts(accountsData || []);
 
-      // Load transactions for credit cards to generate bills
-      const creditAccounts = (accountsData || []).filter(acc => acc.type === 'credit');
-      
-      // Generate mock bills for demonstration (in real app, this would come from backend)
-      const bills = await generateCreditBills(creditAccounts);
-      setCreditBills(bills);
+      // 2. CORREÇÃO: Buscar faturas da NOVA tabela 'credit_bills'
+      const { data: billsData, error: billsError } = await supabase
+        .from('credit_bills')
+        .select('*')
+        .eq('user_id', userData.user.id)
+        .order('due_date', { ascending: false });
 
-    } catch (error) {
+      if (billsError) throw billsError;
+      
+      // Converte datas string para Date objects e valores para centavos
+      const formattedBills = billsData.map(bill => ({
+        ...bill,
+        // Garante data local (o banco retorna 'YYYY-MM-DD')
+        due_date: createDateFromString(bill.due_date),
+        closing_date: createDateFromString(bill.closing_date),
+        start_date: createDateFromString(bill.start_date),
+        // Transforma valores de string (decimal) para números (centavos)
+        total_amount: Math.round(parseFloat(bill.total_amount) * 100),
+        paid_amount: Math.round(parseFloat(bill.paid_amount) * 100),
+        // A API de 'credit_bills' não retorna transações, 
+        // o 'CreditBillDetailsModal' deve buscar se necessário.
+        transactions: [] 
+      }));
+      
+      setCreditBills(formattedBills);
+
+    } catch (error: any) {
       console.error('Error loading data:', error);
       toast({
         title: "Erro",
-        description: "Erro ao carregar dados das faturas.",
+        description: error.message || "Erro ao carregar dados das faturas.",
         variant: "destructive"
       });
     } finally {
@@ -80,156 +107,34 @@ export function CreditBillsPage() {
     }
   };
 
-  const generateCreditBills = async (creditAccounts: Account[]): Promise<CreditBill[]> => {
-    const bills: CreditBill[] = [];
-    
-    // Get transactions for all credit accounts
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return bills;
-
-    const { data: transactions } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('user_id', userData.user.id)
-      .in('account_id', creditAccounts.map(acc => acc.id))
-      .order('date', { ascending: false });
-
-    for (const account of creditAccounts) {
-      const today = new Date();
-      const closingDay = account.closing_date || 21;
-      const dueDay = account.due_date || 30;
-      
-      // Get account transactions
-      const accountTransactions = transactions?.filter(t => t.account_id === account.id) || [];
-      
-      // Generate bills for the last 12 months and next 3 months to show all past and future bills
-      const pastMonths = 12;
-      const futureMonths = 3;
-      const generatedBills = new Map<string, CreditBill>();
-      
-      for (let i = -pastMonths; i <= futureMonths; i++) {
-        const billMonth = new Date(today.getFullYear(), today.getMonth() + i, 1);
-        const closingDate = new Date(billMonth.getFullYear(), billMonth.getMonth(), closingDay);
-        const dueDate = new Date(billMonth.getFullYear(), billMonth.getMonth(), dueDay);
-        
-        // If due day is before closing day, due date is next month
-        if (dueDay < closingDay) {
-          dueDate.setMonth(dueDate.getMonth() + 1);
-        }
-        
-        // Calculate period for transactions (from day after previous closing to current closing)
-        // Para fatura fechando em 21/05, o período deve ser de 22/04 a 21/05
-        const previousClosingDate = new Date(closingDate);
-        previousClosingDate.setMonth(previousClosingDate.getMonth() - 1);
-        
-        const periodStart = new Date(previousClosingDate);
-        periodStart.setDate(periodStart.getDate() + 1); // Dia seguinte ao fechamento anterior
-        
-        // Find transactions in this billing period
-        const periodTransactions = accountTransactions.filter(t => {
-          const transactionDate = new Date(t.date + 'T00:00:00');
-          return transactionDate >= periodStart && transactionDate <= closingDate;
-        });
-        
-        // Calculate bill amounts
-        const expenseTransactions = periodTransactions.filter(t => t.type === 'expense');
-        const totalAmount = expenseTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-        
-        // Create bill for all periods to show complete history (both open and closed bills)
-        const billingCycle = `${(closingDate.getMonth() + 1).toString().padStart(2, '0')}/${closingDate.getFullYear()}`;
-        
-        // For future bills, check if closing date hasn't passed yet
-        const isFutureBill = i > 0 || (i === 0 && today < closingDate);
-        
-        // Only skip very old periods without any transactions at all
-        const hasAnyTransactions = accountTransactions.some(t => {
-          const transactionDate = new Date(t.date + 'T00:00:00');
-          const billMonthStart = new Date(closingDate.getFullYear(), closingDate.getMonth() - 1, 1);
-          const billMonthEnd = new Date(closingDate.getFullYear(), closingDate.getMonth() + 1, 0);
-          return transactionDate >= billMonthStart && transactionDate <= billMonthEnd;
-        });
-        
-        // Include future bills, current period, or periods with transactions
-        if (isFutureBill || hasAnyTransactions || totalAmount > 0 || i >= -3) {
-          
-          console.log(`Período da fatura ${billingCycle}:`, {
-            fechamentoPrevio: previousClosingDate.toLocaleDateString('pt-BR'),
-            inicioPeríodo: periodStart.toLocaleDateString('pt-BR'),
-            fechamentoAtual: closingDate.toLocaleDateString('pt-BR'),
-            transacoesEncontradas: periodTransactions.length
-          });
-          
-          // Calculate payments - buscar pagamentos após a data de fechamento até hoje
-          const paymentStartDate = new Date(closingDate);
-          paymentStartDate.setDate(paymentStartDate.getDate() + 1);
-          
-          const paymentsAfterClosing = accountTransactions.filter(t => {
-            const transactionDate = new Date(t.date + 'T00:00:00');
-            return t.type === 'income' && 
-                   transactionDate > closingDate && 
-                   transactionDate <= today &&
-                   t.description.toLowerCase().includes('pagamento');
-          });
-          
-          const paidAmount = paymentsAfterClosing.reduce((sum, t) => sum + t.amount, 0);
-          
-          // Determine status based on current situation
-          let status: CreditBill['status'] = "pending";
-          
-          if (isFutureBill) {
-            // Future bills are always pending until they close
-            status = "pending";
-          } else if (totalAmount === 0) {
-            status = "paid"; // No expenses in this period
-          } else if (paidAmount >= totalAmount) {
-            status = "paid"; // Fully paid
-          } else if (paidAmount > 0) {
-            status = "partial"; // Partially paid
-          } else if (today > dueDate) {
-            status = "overdue"; // Not paid and overdue
-          } else {
-            status = "pending"; // Not paid but not overdue yet
-          }
-          
-          const bill: CreditBill = {
-            id: `bill-${account.id}-${closingDate.getTime()}`,
-            account_id: account.id,
-            billing_cycle: billingCycle,
-            due_date: dueDate,
-            closing_date: closingDate,
-            total_amount: totalAmount,
-            paid_amount: paidAmount,
-            status,
-            minimum_payment: totalAmount * 0.15,
-            late_fee: status === "overdue" ? totalAmount * 0.02 : 0,
-            transactions: periodTransactions
-          };
-          
-          generatedBills.set(billingCycle, bill);
-        }
-      }
-      
-      // Add all generated bills to the array
-      bills.push(...Array.from(generatedBills.values()));
-    }
-    
-    return bills.sort((a, b) => b.due_date.getTime() - a.due_date.getTime());
-  };
+  // REMOVIDO: A função 'generateCreditBills' foi deletada. O SQL agora faz isso.
 
   const formatCurrency = (value: number) => {
+    // CORREÇÃO: O valor agora está em CENTAVOS, como no resto da aplicação
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
-    }).format(value);
+    }).format(value / 100);
   };
 
   const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat('pt-BR').format(date);
+    return format(date, "dd/MM/yyyy", { locale: ptBR });
   };
 
-  const getStatusBadge = (status: CreditBill['status']) => {
-    const variants = {
-      pending: { 
+  const getStatusBadge = (status: CreditBill['status'] | string) => {
+    // Status pode vir do DB como 'closed', 'open', 'paid', 'partial'
+    const variants: Record<string, { variant: "default" | "destructive" | "secondary" | "outline", label: string, className: string }> = {
+      open: { 
+        variant: "secondary" as const, 
+        label: "Aberta",
+        className: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" 
+      },
+      closed: { 
+        variant: "secondary" as const, 
+        label: "Fechada",
+        className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" 
+      },
+      pending: { // Alias para 'closed'
         variant: "secondary" as const, 
         label: "Pendente",
         className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" 
@@ -251,20 +156,22 @@ export function CreditBillsPage() {
       }
     };
     
+    const config = variants[status] || variants.pending;
+    
     return (
       <Badge 
-        variant={variants[status].variant}
-        className={variants[status].className}
+        variant={config.variant}
+        className={config.className}
       >
-        {variants[status].label}
+        {config.label}
       </Badge>
     );
   };
 
 
-  // Count bills by status for summary
   const billsByStatus = creditBills.reduce((acc, bill) => {
-    acc[bill.status] = (acc[bill.status] || 0) + 1;
+    const statusKey = bill.status || 'pending';
+    acc[statusKey] = (acc[statusKey] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
@@ -276,80 +183,95 @@ export function CreditBillsPage() {
     }
   };
 
-  const handlePayment = async (creditAccountId: string, bankAccountId: string, amount: number, date: Date) => {
+  /**
+   * CORREÇÃO CRÍTICA (LÓGICA CONTÁBIL):
+   * Pagamento de fatura é uma TRANSFERÊNCIA, não uma Despesa + Receita.
+   * Não atualizamos mais os saldos (o trigger SQL faz isso).
+   */
+  const handlePayment = async (creditAccountId: string, bankAccountId: string, amountInCents: number, date: Date): Promise<{ creditAccount: Account, bankAccount: Account }> => {
     try {
-      // Create payment transaction in database
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error("User not authenticated");
 
-      // Insert debit transaction for bank account
-      const { error: debitError } = await supabase
+      // 1. Encontrar a categoria "Pagamento de Fatura"
+      const paymentCategory = categories.find(c => c.name.toLowerCase() === 'pagamento de fatura');
+      if (!paymentCategory) {
+        throw new Error("Categoria 'Pagamento de Fatura' não encontrada. Adicione-a nas Configurações.");
+      }
+      
+      // 2. Criar UMA transação de TRANSFERÊNCIA
+      // O valor da transferência é o `amountInCents`
+      // O `amount` na tabela de transações para transferências é negativo (saindo da origem)
+      const { error: transferError } = await supabase
         .from('transactions')
         .insert({
           user_id: userData.user.id,
-          account_id: bankAccountId,
-          description: `Pagamento fatura cartão ${accounts.find(acc => acc.id === creditAccountId)?.name || 'Cartão'}`,
-          amount: -amount,
-          type: 'expense',
+          account_id: bankAccountId,      // De: Conta Bancária
+          to_account_id: creditAccountId, // Para: Cartão de Crédito
+          description: `Pagamento Fatura ${accounts.find(acc => acc.id === creditAccountId)?.name || ''}`,
+          amount: -Math.abs(amountInCents / 100), // Envia como DECIMAL para o DB
+          type: 'transfer',
           date: date.toISOString().split('T')[0],
-          status: 'completed'
+          status: 'completed',
+          category_id: paymentCategory.id
         });
 
-      if (debitError) throw debitError;
+      if (transferError) throw transferError;
 
-      // Insert credit transaction for credit card
-      const { error: creditError } = await supabase
-        .from('transactions')
-        .insert({
-          user_id: userData.user.id,
-          account_id: creditAccountId,
-          description: `Pagamento fatura ${formatCurrency(amount)} recebido`,
-          amount: amount,
-          type: 'income',
-          date: date.toISOString().split('T')[0],
-          status: 'completed'
-        });
-
-      if (creditError) throw creditError;
-
-      // Update account balances
-      const bankAccount = accounts.find(acc => acc.id === bankAccountId);
-      const creditAccount = accounts.find(acc => acc.id === creditAccountId);
-
-      if (bankAccount) {
+      // 3. (Opcional) Atualizar o 'paid_amount' na tabela 'credit_bills' via RPC
+      // (Opcional, mas bom para a UI)
+      if (selectedBill) {
         await supabase
-          .from('accounts')
-          .update({ balance: bankAccount.balance - amount })
-          .eq('id', bankAccountId);
+          .from('credit_bills')
+          .update({ 
+            paid_amount: (selectedBill.paid_amount + amountInCents) / 100, // Envia DECIMAL
+            status: (selectedBill.paid_amount + amountInCents) >= selectedBill.total_amount ? 'paid' : 'partial'
+          })
+          .eq('id', selectedBill.id);
       }
 
-      if (creditAccount) {
-        await supabase
-          .from('accounts')
-          .update({ balance: creditAccount.balance + amount })
-          .eq('id', creditAccountId);
-      }
 
       toast({
         title: "Pagamento Realizado",
-        description: `Pagamento de ${formatCurrency(amount)} realizado com sucesso!`,
+        description: `Pagamento de ${formatCurrency(amountInCents)} enviado com sucesso!`,
         variant: "default"
       });
       
-      // Reload data to reflect changes
+      // Recarrega os dados para refletir o novo saldo (que o trigger atualizou)
       await loadData();
       setPaymentModalOpen(false);
-    } catch (error) {
+      
+      // 4. Retorna as contas atualizadas para o modal (como ele esperava)
+      // Apenas buscamos os dados frescos do banco
+      const { data: updatedAccountsData, error: updatedAccountsError } = await supabase
+        .from('accounts')
+        .select('*')
+        .in('id', [creditAccountId, bankAccountId]);
+
+      if (updatedAccountsError) throw updatedAccountsError;
+
+      const updatedAccounts = updatedAccountsData.map(acc => ({
+        ...acc,
+        balance: Math.round(parseFloat(acc.balance) * 100)
+      }));
+
+      const creditAccount = updatedAccounts.find(acc => acc.id === creditAccountId);
+      const bankAccount = updatedAccounts.find(acc => acc.id === bankAccountId);
+
+      if (!creditAccount || !bankAccount) {
+        throw new Error("Não foi possível buscar contas atualizadas.");
+      }
+      
+      return { creditAccount, bankAccount };
+
+    } catch (error: any) {
       console.error('Error processing payment:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao processar pagamento.",
-        variant: "destructive"
-      });
+      toast({ title: "Erro", description: error.message || "Erro ao processar pagamento.", variant: "destructive" });
+      throw error; // Propaga o erro para o modal
     }
   };
 
-  // Filter bills by date - now filters by due date only (not closing date)
+  // Filter bills by date - filters by due date
   const getFilteredBillsByDate = (bills: CreditBill[]) => {
     if (dateFilter === "all") {
       return bills;
@@ -357,15 +279,11 @@ export function CreditBillsPage() {
       const now = new Date();
       const start = startOfMonth(now);
       const end = endOfMonth(now);
-      return bills.filter(bill => {
-        return isWithinInterval(bill.due_date, { start, end });
-      });
+      return bills.filter(bill => isWithinInterval(bill.due_date, { start, end }));
     } else if (dateFilter === "month_picker") {
       const start = startOfMonth(selectedMonth);
       const end = endOfMonth(selectedMonth);
-      return bills.filter(bill => {
-        return isWithinInterval(bill.due_date, { start, end });
-      });
+      return bills.filter(bill => isWithinInterval(bill.due_date, { start, end }));
     } else if (dateFilter === "custom" && customStartDate && customEndDate) {
       return bills.filter(bill => {
         return bill.due_date >= customStartDate && bill.due_date <= customEndDate;
@@ -381,10 +299,13 @@ export function CreditBillsPage() {
     bills = getFilteredBillsByDate(bills);
     
     // Apply account and status filters
-    const accountMatch = selectedAccount === "all" || bills.filter(bill => bill.account_id === selectedAccount);
     const filtered = bills.filter(bill => {
       const accountMatches = selectedAccount === "all" || bill.account_id === selectedAccount;
-      const statusMatches = selectedStatus === "all" || bill.status === selectedStatus;
+      // Mapeia 'closed' e 'pending' (do DB) para 'pending' (na UI)
+      let billStatus = bill.status;
+      if (billStatus === 'closed') billStatus = 'pending';
+      
+      const statusMatches = selectedStatus === "all" || billStatus === selectedStatus;
       return accountMatches && statusMatches;
     });
     
@@ -400,25 +321,12 @@ export function CreditBillsPage() {
     setSelectedMonth(prev => addMonths(prev, 1));
   };
 
-  const getPeriodLabel = () => {
-    if (dateFilter === "all") {
-      return "Todas as faturas";
-    } else if (dateFilter === "current_month") {
-      return new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-    } else if (dateFilter === "month_picker") {
-      return selectedMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-    } else if (dateFilter === "custom" && customStartDate && customEndDate) {
-      return `${format(customStartDate, 'dd/MM/yyyy', { locale: ptBR })} - ${format(customEndDate, 'dd/MM/yyyy', { locale: ptBR })}`;
-    }
-    return "Período selecionado";
-  };
-
   const creditAccounts = accounts.filter(acc => acc.type === 'credit');
   const totalPending = filteredBills
-    .filter(bill => bill.status === "pending" || bill.status === "overdue")
-    .reduce((sum, bill) => sum + bill.total_amount, 0);
+    .filter(bill => bill.status === "closed" || bill.status === "pending" || bill.status === "overdue")
+    .reduce((sum, bill) => sum + (bill.total_amount - bill.paid_amount), 0); // Mostra o que falta pagar
 
-  if (loading) {
+  if (loading || categoriesLoading) {
     return (
       <div className="space-y-6">
         <div className="animate-pulse">
@@ -457,7 +365,7 @@ export function CreditBillsPage() {
                   {formatCurrency(totalPending)}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {filteredBills.filter(b => b.status === "pending" || b.status === "overdue").length} faturas
+                  {filteredBills.filter(b => b.status === "closed" || b.status === "pending" || b.status === "overdue").length} faturas
                 </p>
               </div>
               <CreditCard className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground flex-shrink-0" />
@@ -469,10 +377,7 @@ export function CreditBillsPage() {
               <div className="space-y-1 min-w-0 flex-1">
                 <p className="text-financial-caption text-muted-foreground">Próximas Abertas</p>
                 <div className="text-financial-value text-primary truncate">
-                  {filteredBills.filter(b => {
-                    const today = new Date();
-                    return b.closing_date > today && b.status === "pending";
-                  }).length}
+                  {filteredBills.filter(b => b.status === "open").length}
                 </div>
                 <p className="text-xs text-muted-foreground">Faturas futuras</p>
               </div>
@@ -497,9 +402,8 @@ export function CreditBillsPage() {
                 <p className="text-financial-caption text-muted-foreground">Este Mês</p>
                 <div className="text-financial-value truncate">
                   {filteredBills.filter(b => {
-                    const currentMonth = new Date().getMonth() + 1;
-                    const billMonth = parseInt(b.billing_cycle.split('/')[0]);
-                    return billMonth === currentMonth;
+                    const currentMonth = new Date().getMonth();
+                    return b.due_date.getMonth() === currentMonth;
                   }).length}
                 </div>
                 <p className="text-xs text-muted-foreground">Faturas do mês</p>
@@ -520,7 +424,7 @@ export function CreditBillsPage() {
             <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
               {/* Period Filter */}
               <div className="space-y-2">
-                <label className="text-financial-caption text-muted-foreground">Período</label>
+                <label className="text-financial-caption text-muted-foreground">Período Vencimento</label>
                 <Select value={dateFilter} onValueChange={(value: "all" | "current_month" | "month_picker" | "custom") => setDateFilter(value)}>
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue />
@@ -659,6 +563,7 @@ export function CreditBillsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos os status</SelectItem>
+                    <SelectItem value="open">Aberta</SelectItem>
                     <SelectItem value="pending">Pendente</SelectItem>
                     <SelectItem value="paid">Paga</SelectItem>
                     <SelectItem value="overdue">Vencida</SelectItem>
@@ -705,6 +610,7 @@ export function CreditBillsPage() {
                 {filteredBills.map((bill) => {
                   const account = accounts.find(acc => acc.id === bill.account_id);
                   const isOverdue = bill.status === "overdue";
+                  const billingCycle = `${format(bill.start_date, 'dd/MM')} - ${format(bill.closing_date, 'dd/MM')}`;
                     
                   return (
                     <div 
@@ -724,7 +630,7 @@ export function CreditBillsPage() {
                           />
                           <div className="min-w-0">
                             <h4 className="text-financial-button truncate">{account?.name}</h4>
-                            <p className="text-financial-caption text-muted-foreground">{bill.billing_cycle}</p>
+                            <p className="text-financial-caption text-muted-foreground">{billingCycle}</p>
                           </div>
                         </div>
                         {getStatusBadge(bill.status)}
@@ -760,7 +666,7 @@ export function CreditBillsPage() {
                           <Eye className="h-3 w-3 mr-1" />
                           Ver
                         </Button>
-                        {bill.status !== "paid" && (
+                        {bill.status !== "paid" && bill.status !== "open" && bill.total_amount > 0 && (
                           <Button 
                             size="sm" 
                             onClick={() => handlePayBill(bill)}
@@ -786,16 +692,14 @@ export function CreditBillsPage() {
           open={paymentModalOpen}
           onOpenChange={setPaymentModalOpen}
           onPayment={handlePayment}
-          accounts={accounts}
+          // accounts={accounts} // O modal agora usa o useAccountStore
           creditAccount={selectedBill ? accounts.find(acc => acc.id === selectedBill.account_id) : null}
-          invoiceValueInCents={selectedBill?.total_amount}
+          invoiceValueInCents={selectedBill?.total_amount} // Passa em centavos
           nextInvoiceValueInCents={
-            creditBills.find(b => {
-              const nextMonth = addMonths(selectedBill.closing_date, 1);
-              return b.account_id === selectedBill.account_id &&
-                     b.closing_date.getMonth() === nextMonth.getMonth() &&
-                     b.closing_date.getFullYear() === nextMonth.getFullYear();
-            })?.total_amount || 0
+            creditBills.find(b => 
+              b.account_id === selectedBill.account_id &&
+              b.status === 'open'
+            )?.total_amount || 0 // Passa em centavos
           }
         />
       )}

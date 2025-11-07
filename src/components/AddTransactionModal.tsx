@@ -46,7 +46,7 @@ interface Account {
 interface AddTransactionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAddTransaction: (transaction: Omit<Transaction, "id" | "createdAt" | "currentInstallment" | "parentTransactionId">) => void;
+  onAddTransaction: (transaction: Omit<Transaction, "id" | "createdAt" | "currentInstallment" | "parentTransactionId" | "installments">) => void;
   onAddInstallmentTransactions?: (transactions: Omit<Transaction, "id" | "createdAt">[]) => void; // Mantém a estrutura completa para parcelas
   accounts: Account[];
 }
@@ -91,8 +91,10 @@ export function AddTransactionModal({
       setCategories(data || []);
     };
     
-    loadCategories();
-  }, [user]);
+    if (open && user) {
+        loadCategories();
+    }
+  }, [user, open]);
 
   // Automatically set status based on transaction date
   useEffect(() => {
@@ -162,82 +164,59 @@ export function AddTransactionModal({
     // ------ LÓGICA DE PARCELAMENTO CORRIGIDA ------
 
     try {
-      if (isInstallment) {
-        // Cenário 1: Parcelamento no Cartão de Crédito
-        // Lógica: Lançar UMA transação pelo valor TOTAL para reconciliação
-        if (selectedAccount.type === 'credit' && onAddTransaction) {
+      // CORREÇÃO: A lógica de parcelamento é unificada.
+      // Seja cartão de crédito ou não, devemos gerar N transações
+      // para que elas caiam nas faturas/fluxos de caixa corretos de cada mês.
+      if (isInstallment && onAddInstallmentTransactions) {
+        
+        // Lógica de arredondamento para evitar perda de centavos
+        const baseInstallmentCents = Math.floor(totalAmountInCents / installments);
+        const remainderCents = totalAmountInCents % installments;
+        
+        const transactions = [];
+        const baseDate = createDateFromString(date); // Usa helper para evitar fuso
+        const parentId = crypto.randomUUID();
+        const todayStr = getTodayString();
+
+        for (let i = 0; i < installments; i++) {
+          // Adiciona o resto na primeira parcela
+          const installmentAmount = i === 0 ? (baseInstallmentCents + remainderCents) : baseInstallmentCents;
+          const installmentDate = addMonthsToDate(baseDate, i);
+          const installmentDateStr = installmentDate.toISOString().split('T')[0];
           
+          // Status baseado na data da *parcela*
+          const installmentStatus = installmentDateStr <= todayStr ? status : "pending";
+
           const transaction = {
-            description: `${description} (1/${installments})`, // Descrição indica ser a "mãe"
-            amount: totalAmountInCents, // Valor total da compra
-            date: createDateFromString(date), // Já é um objeto Date
+            description: `${description} (${i + 1}/${installments})`,
+            // O valor deve ser negativo para despesas
+            amount: type === 'expense' ? -Math.abs(installmentAmount) : installmentAmount,
+            date: installmentDate,
             type: type as "income" | "expense",
             category_id: category_id,
             account_id: account_id,
-            status: status,
-            installments: installments, // Metadata: total de parcelas
-            currentInstallment: 1,      // Metadata: parcela atual
-            parentTransactionId: crypto.randomUUID() // ID único para agrupar
+            status: installmentStatus as "completed" | "pending",
+            installments: installments,
+            currentInstallment: i + 1,
+            parentTransactionId: parentId
           };
-
-          await onAddTransaction(transaction);
-          toast({
-            title: "Sucesso",
-            description: `Transação (Cartão de Crédito) adicionada com sucesso!`,
-            variant: "default"
-          });
-
-        } 
-        // Cenário 2: Parcelamento em outra conta (ex: "Pix Parcelado")
-        // Lógica: Lançar N transações futuras, com valor corrigido
-        else if (selectedAccount.type !== 'credit' && onAddInstallmentTransactions) {
-          
-          // Lógica de arredondamento para evitar perda de centavos
-          const baseInstallmentCents = Math.floor(totalAmountInCents / installments);
-          const remainderCents = totalAmountInCents % installments;
-          
-          const transactions = [];
-          const baseDate = createDateFromString(date);
-          const parentId = crypto.randomUUID();
-          const todayStr = getTodayString();
-
-          for (let i = 0; i < installments; i++) {
-            // Adiciona o resto na primeira parcela
-            const installmentAmount = i === 0 ? (baseInstallmentCents + remainderCents) : baseInstallmentCents;
-            const installmentDate = addMonthsToDate(baseDate, i);
-            const installmentDateStr = installmentDate.toISOString().split('T')[0];
-            
-            // Status baseado na data da *parcela*
-            const installmentStatus = installmentDateStr <= todayStr ? "completed" : "pending";
-
-            const transaction = {
-              description: `${description} (${i + 1}/${installments})`,
-              amount: installmentAmount,
-              date: installmentDate,
-              type: type as "income" | "expense",
-              category_id: category_id,
-              account_id: account_id,
-              status: installmentStatus as "completed" | "pending",
-              installments: installments,
-              currentInstallment: i + 1,
-              parentTransactionId: parentId
-            };
-            transactions.push(transaction);
-          }
-
-          await onAddInstallmentTransactions(transactions);
-          toast({
-            title: "Sucesso",
-            description: `Transação dividida em ${installments}x adicionada com sucesso!`,
-            variant: "default"
-          });
+          transactions.push(transaction);
         }
+
+        await onAddInstallmentTransactions(transactions);
+        toast({
+          title: "Sucesso",
+          description: `Transação dividida em ${installments}x adicionada com sucesso!`,
+          variant: "default"
+        });
+        
       } else {
         // Cenário 3: Transação Única (sem parcelamento)
         await onAddTransaction({
           description: description,
-          amount: totalAmountInCents,
-          date: createDateFromString(date), // Passa o objeto Date diretamente
+          // O valor deve ser negativo para despesas
+          amount: type === 'expense' ? -Math.abs(totalAmountInCents) : totalAmountInCents,
+          date: createDateFromString(date), // Passa o objeto Date
           type: type as "income" | "expense",
           category_id: category_id,
           account_id: account_id,
@@ -265,11 +244,11 @@ export function AddTransactionModal({
       });
       onOpenChange(false);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating transaction(s):', error);
       toast({
         title: "Erro",
-        description: "Erro ao criar transação. Tente novamente.",
+        description: error.message || "Erro ao criar transação. Tente novamente.",
         variant: "destructive"
       });
     }
@@ -296,7 +275,7 @@ export function AddTransactionModal({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="type">Tipo</Label>
-              <Select value={formData.type} onValueChange={(value) => setFormData(prev => ({ ...prev, type: value as any }))}>
+              <Select value={formData.type} onValueChange={(value) => setFormData(prev => ({ ...prev, type: value as any, category_id: "" }))}>
                 <SelectTrigger>
                   <SelectValue placeholder="Tipo" />
                 </SelectTrigger>
@@ -309,7 +288,6 @@ export function AddTransactionModal({
 
             <div className="space-y-2">
               <Label htmlFor="amount">Valor (R$)</Label>
-              {/* CORREÇÃO: Input de 'text' para lidar com vírgula */}
               <Input
                 id="amount"
                 type="text"
@@ -405,11 +383,7 @@ export function AddTransactionModal({
               <div className="space-y-0.5">
                 <Label htmlFor="installment">Transação Parcelada</Label>
                 <p className="text-sm text-muted-foreground">
-                  {/* CORREÇÃO: Texto dinâmico */}
-                  {formData.account_id && accounts.find(acc => acc.id === formData.account_id)?.type === 'credit' 
-                    ? "Lançar compra parcelada no cartão"
-                    : "Dividir esta transação em parcelas mensais"
-                  }
+                  Dividir esta transação em parcelas mensais.
                 </p>
               </div>
               <Switch
@@ -438,15 +412,12 @@ export function AddTransactionModal({
                     {Array.from({ length: 59 }, (_, i) => i + 2).map((num) => (
                       <SelectItem key={num} value={num.toString()}>
                         {num}x
-                        {/* A prévia do valor da parcela só é exibida se for
-                          um parcelamento que GERA N transações (não cartão).
-                        */}
-                        {formData.amount && (formData.account_id && accounts.find(acc => acc.id === formData.account_id)?.type !== 'credit') ? 
+                        {/* Prévia do valor da parcela */}
+                        {formData.amount && 
                           ` de ${new Intl.NumberFormat('pt-BR', {
                             style: 'currency',
                             currency: 'BRL'
                           }).format(currencyStringToCents(formData.amount) / 100 / num)}`
-                          : ''
                         }
                       </SelectItem>
                     ))}
