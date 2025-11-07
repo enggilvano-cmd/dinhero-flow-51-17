@@ -379,10 +379,9 @@ export function Dashboard({ accounts, transactions, categories, onTransfer, onAd
         </div>
       </div>
 
-      {/* Layout Otimizado - Cards em 2 linhas principais */}
+      {/* Layout Otimizado - Cards em um único grid responsivo */}
       <div className="space-y-3 sm:space-y-4">
-        {/* Primeira linha - Filtro + Saldo Total (2 por linha no mobile) */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 gap-3 sm:gap-4">
           {/* Card de Filtros */}
           <Card className="financial-card">
             <CardContent className="p-3">
@@ -520,10 +519,7 @@ export function Dashboard({ accounts, transactions, categories, onTransfer, onAd
               <p className="text-xs text-muted-foreground mt-1 opacity-70">Contas e poupança</p>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Segunda linha - Receitas e Despesas (2 por linha no mobile) */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {/* Receitas */}
           <Card 
             className="financial-card cursor-pointer apple-interaction"
@@ -567,10 +563,7 @@ export function Dashboard({ accounts, transactions, categories, onTransfer, onAd
               <p className="text-xs text-muted-foreground mt-1 opacity-70">{getPeriodLabel()}</p>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Segunda linha - Cards complementares - 2 por linha no mobile */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {/* Crédito Disponível */}
           <Card 
             className="financial-card cursor-pointer apple-interaction"

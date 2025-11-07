@@ -7,12 +7,10 @@ ON profiles
 FOR INSERT 
 WITH CHECK (auth.uid() = user_id);
 
--- Allow authenticated users to view all profiles (needed for user management)
-DROP POLICY IF EXISTS "Users can view all profiles" ON profiles;
-CREATE POLICY "Users can view all profiles" 
-ON profiles 
-FOR SELECT 
-USING (auth.uid() IS NOT NULL);
+-- [CORREÇÃO]: A política "Users can view all profiles"
+-- que existia aqui foi REMOVIDA. Ela criava uma falha de segurança
+-- grave. As políticas corretas de visualização (próprio usuário e admin)
+-- já existem na migração 20250820071704_636dea78-7ec2-4e8a-8c21-6d626646ed4c.sql
 
 -- Ensure audit_logs can be inserted by authenticated users
 DROP POLICY IF EXISTS "Users can insert audit logs" ON audit_logs;

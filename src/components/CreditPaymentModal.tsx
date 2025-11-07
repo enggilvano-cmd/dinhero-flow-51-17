@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,19 +17,24 @@ interface CreditPaymentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPayment: (creditAccountId: string, bankAccountId: string, amountInCents: number, date: Date) => Promise<{ creditAccount: Account, bankAccount: Account }>;
-  creditAccount: Account | null;
+  creditAccount: Account | null;  
+  // Props para valores da fatura, passados pelo componente pai
+  invoiceValueInCents?: number;
+  nextInvoiceValueInCents?: number;
 }
 
 export function CreditPaymentModal({ 
   open, 
   onOpenChange, 
   onPayment, 
-  creditAccount 
+  creditAccount,
+  invoiceValueInCents = 0,
+  nextInvoiceValueInCents = 0
 }: CreditPaymentModalProps) {
   const [formData, setFormData] = useState({
     bankAccountId: "",
     amount: "",
-    paymentType: "total" as "total" | "partial",
+    paymentType: "invoice" as "invoice" | "total_balance" | "partial",
     date: getTodayString()
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,8 +42,23 @@ export function CreditPaymentModal({
   const accounts = useAccountStore((state) => state.accounts);
   const updateAccountsInStore = useAccountStore((state) => state.updateAccounts);
 
-  // Only bank accounts can pay credit cards
+  // Apenas contas bancárias podem pagar faturas
   const bankAccounts = useMemo(() => accounts.filter(acc => acc.type !== "credit"), [accounts]);
+
+  useEffect(() => {
+    if (open) {
+      // Define o valor da fatura como padrão ao abrir
+      handlePaymentTypeChange("invoice");
+    } else {
+      // Reseta o formulário ao fechar
+      setFormData({
+        bankAccountId: "",
+        amount: "",
+        paymentType: "invoice",
+        date: getTodayString()
+      });
+    }
+  }, [open, invoiceValueInCents]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,9 +82,7 @@ export function CreditPaymentModal({
       return;
     }
 
-    // Check if bank account has sufficient balance or overdraft limit
-    // Frontend validation for UX. The backend should always re-validate this rule
-    // to ensure data integrity and prevent unauthorized transactions.
+    // Validação de saldo da conta de origem (UX)
     const bankAccount = accounts.find(acc => acc.id === formData.bankAccountId);
     if (bankAccount) {
       const availableBalanceInCents = getAvailableBalance(bankAccount);
@@ -81,12 +99,12 @@ export function CreditPaymentModal({
       }
     }
 
-    // Check if payment amount is not greater than credit balance (debt)
-    const creditDebtInCents = Math.abs(creditAccount.balance);
-    if (amountInCents > creditDebtInCents && formData.paymentType !== 'total') {
+    // O usuário não pode pagar mais do que o saldo devedor total.
+    const totalDebtInCents = Math.abs(creditAccount.balance);
+    if (amountInCents > totalDebtInCents) {
       toast({
         title: "Valor Inválido",
-        description: `O valor do pagamento não pode ser maior que a dívida de ${formatCurrency(creditDebtInCents)}.`,
+        description: `O valor do pagamento ( ${formatCurrency(amountInCents)} ) não pode ser maior que a dívida total de ${formatCurrency(totalDebtInCents)}.`,
         variant: "destructive"
       });
       return;
@@ -95,10 +113,6 @@ export function CreditPaymentModal({
     setIsSubmitting(true);
     try {
       const { creditAccount: updatedCreditAccount, bankAccount: updatedBankAccount } = await onPayment(
-        // A lógica de pagamento de fatura deve ser tratada no backend como duas transações:
-        // 1. Uma despesa na conta de origem (bankAccountId)
-        // 2. Uma receita (amortização de dívida) na conta de destino (creditAccountId)
-        // Esta chamada única assume que o backend abstrai essa complexidade.
         creditAccount.id,
         formData.bankAccountId,
         amountInCents,
@@ -107,15 +121,7 @@ export function CreditPaymentModal({
 
       // Atualiza as contas no store global
       updateAccountsInStore([updatedCreditAccount, updatedBankAccount]);
-
-      // Reset form
-      setFormData({
-        bankAccountId: "",
-        amount: "",
-        paymentType: "total",
-        date: getTodayString()
-      });
-      onOpenChange(false);
+      onOpenChange(false); // Fechar o modal
     } catch (error) {
       console.error("Payment failed:", error);
     } finally {
@@ -123,15 +129,26 @@ export function CreditPaymentModal({
     }
   };
 
-  const handlePaymentTypeChange = (type: "total" | "partial") => {
+  const handlePaymentTypeChange = (type: "invoice" | "total_balance" | "partial") => {
+    let newAmount = "";
+    if (type === "invoice" && creditAccount) {
+      // Pagar a fatura fechada
+      newAmount = (invoiceValueInCents / 100).toFixed(2).replace('.', ',');
+    } else if (type === "total_balance" && creditAccount) {
+      // Pagar o saldo devedor total (fatura fechada + fatura aberta)
+      newAmount = (Math.abs(creditAccount.balance) / 100).toFixed(2).replace('.', ',');
+    }
+    // Se for 'partial', newAmount fica "" e o input é liberado
+
     setFormData(prev => ({
       ...prev,
       paymentType: type,
-      amount: type === "total" && creditAccount 
-        ? (Math.abs(creditAccount.balance) / 100).toFixed(2).replace('.', ',')
-        : ""
+      amount: newAmount
     }));
   };
+  
+  // O saldo devedor total (ex: -50000)
+  const totalDebtInCents = creditAccount ? Math.abs(creditAccount.balance) : 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -145,13 +162,28 @@ export function CreditPaymentModal({
         
         <form onSubmit={handleSubmit} className="space-y-6">
           {creditAccount && (
-            <div className="p-4 bg-muted rounded-lg">
-              <h3 className="font-semibold mb-2">{creditAccount.name}</h3>
-              <p className="text-sm text-muted-foreground">
-                Valor da fatura: <span className="font-medium balance-negative">
-                  {formatCurrency(Math.abs(creditAccount.balance))}
-                </span>
-              </p>
+            <div className="p-4 bg-muted rounded-lg space-y-2">
+              <h3 className="font-semibold">{creditAccount.name}</h3>
+              <div className="text-sm space-y-1">
+                <p className="flex justify-between">
+                  <span className="text-muted-foreground">Fatura Fechada:</span>
+                  <span className="font-medium balance-negative">
+                    {formatCurrency(invoiceValueInCents || 0)}
+                  </span>
+                </p>
+                <p className="flex justify-between">
+                  <span className="text-muted-foreground">Fatura Aberta:</span>
+                  <span className="font-medium text-muted-foreground">
+                    {formatCurrency(nextInvoiceValueInCents)}
+                  </span>
+                </p>
+                <p className="flex justify-between text-base font-semibold border-t pt-1 mt-1">
+                  <span className="text-foreground">Saldo Devedor Total:</span>
+                  <span className="balance-negative">
+                    {formatCurrency(totalDebtInCents)}
+                  </span>
+                </p>
+              </div>
             </div>
           )}
 
@@ -173,7 +205,7 @@ export function CreditPaymentModal({
                           <span>{account.name}</span>
                         </div>
                         <span className="ml-2 text-sm text-muted-foreground">
-                          {formatCurrency(account.balance)}
+                          {formatCurrency(getAvailableBalance(account))}
                         </span>
                       </div>
                     </SelectItem>
@@ -187,27 +219,40 @@ export function CreditPaymentModal({
 
           <div className="space-y-3">
             <Label>Tipo de Pagamento</Label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               <Button
                 type="button"
-                variant={formData.paymentType === "total" ? "default" : "outline"}
-                onClick={() => handlePaymentTypeChange("total")}
-                className="h-auto p-3 flex-col"
+                variant={formData.paymentType === "invoice" ? "default" : "outline"}
+                onClick={() => handlePaymentTypeChange("invoice")}
+                className="h-auto p-2 flex-col"
+                disabled={invoiceValueInCents <= 0}
               >
-                <span className="font-medium">Pagamento Total</span>
+                <span className="font-medium text-xs">Pagar Fatura</span>
                 <span className="text-xs text-muted-foreground">
-                  {creditAccount && formatCurrency(Math.abs(creditAccount.balance))}
+                  {formatCurrency(invoiceValueInCents)}
+                </span>
+              </Button>
+              <Button
+                type="button"
+                variant={formData.paymentType === "total_balance" ? "default" : "outline"}
+                onClick={() => handlePaymentTypeChange("total_balance")}
+                className="h-auto p-2 flex-col"
+                disabled={totalDebtInCents <= 0}
+              >
+                <span className="font-medium text-xs">Pagar Total</span>
+                <span className="text-xs text-muted-foreground">
+                  {formatCurrency(totalDebtInCents)}
                 </span>
               </Button>
               <Button
                 type="button"
                 variant={formData.paymentType === "partial" ? "default" : "outline"}
                 onClick={() => handlePaymentTypeChange("partial")}
-                className="h-auto p-3 flex-col"
+                className="h-auto p-2 flex-col"
               >
-                <span className="font-medium">Pagamento Parcial</span>
+                <span className="font-medium text-xs">Outro Valor</span>
                 <span className="text-xs text-muted-foreground">
-                  Valor personalizado
+                  Valor manual
                 </span>
               </Button>
             </div>
@@ -219,11 +264,14 @@ export function CreditPaymentModal({
               <Input
                 id="amount"
                 type="text"
-                step="0.01"
                 placeholder="0,00"
                 value={formData.amount}
-                onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                disabled={formData.paymentType === "total"}
+                onChange={(e) => setFormData(prev => ({ 
+                  ...prev, 
+                  amount: e.target.value,
+                  // Se o usuário digitar, muda para pagamento parcial
+                  paymentType: "partial"
+                }))}
               />
             </div>
 
@@ -237,7 +285,6 @@ export function CreditPaymentModal({
               />
             </div>
           </div>
-
 
           {bankAccounts.length === 0 && (
             <div className="p-4 bg-muted rounded-lg">

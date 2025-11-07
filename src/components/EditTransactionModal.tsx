@@ -45,7 +45,9 @@ export function EditTransactionModal({
   const accounts = useAccountStore((state) => state.accounts);
 
   useEffect(() => {
-    if (transaction) {
+    // Apenas atualize o formulário quando o modal for aberto ou a transação real mudar.
+    // Depender de `transaction.id` previne re-execuções desnecessárias.
+    if (open && transaction) {
       // Use createDateFromString para evitar problemas de fuso horário
       const transactionDate = typeof transaction.date === 'string' ? 
         createDateFromString(transaction.date.split('T')[0]) : 
@@ -54,7 +56,7 @@ export function EditTransactionModal({
       const transactionType = transaction.type === "transfer" ? "expense" : transaction.type;
       setFormData({
         description: transaction.description,
-        amount: (transaction.amount / 100).toFixed(2).replace('.', ','),
+        amount: (Math.abs(transaction.amount) / 100).toFixed(2).replace('.', ','),
         date: transactionDate,
         type: transactionType as "income" | "expense",
         category_id: transaction.category_id,
@@ -62,7 +64,7 @@ export function EditTransactionModal({
         status: transaction.status
       });
     }
-  }, [transaction]);
+  }, [open, transaction?.id]); // Depende de `open` e `transaction.id`
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,7 +121,7 @@ export function EditTransactionModal({
     const updatedTransaction: Transaction = {
       ...transaction,
       description: formData.description.trim(),
-      amount: amountInCents,
+      amount: formData.type === 'income' ? amountInCents : -Math.abs(amountInCents),
       // A data da transação não deve ser alterada automaticamente. 
       // A fatura a que pertence é uma consequência da data, e não o contrário.
       // A seleção de fatura deve servir apenas para mover a transação para outra fatura,
@@ -184,7 +186,7 @@ export function EditTransactionModal({
             <Input
               id="amount"
               type="text"
-              inputMode="decimal"
+              inputMode="numeric"
               min="0"
               value={formData.amount}
               onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
@@ -275,19 +277,19 @@ export function EditTransactionModal({
               <SelectTrigger>
                 <SelectValue placeholder="Selecione uma conta" />
               </SelectTrigger>
-                <SelectContent>
-                  {accounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
-                      <div className="flex items-center gap-2">
-                        <div 
-                          className="w-3 h-3 rounded-full" 
-                          style={{ backgroundColor: account.color || "#6b7280" }}
-                        />
-                        {account.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+              <SelectContent>
+                {accounts.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: account.color || "#6b7280" }}
+                      />
+                      {account.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
 

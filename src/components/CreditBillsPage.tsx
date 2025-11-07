@@ -701,162 +701,80 @@ export function CreditBillsPage() {
                 </p>
               </div>
             ) : (
-              <>
-                {/* Mobile e Tablet: Lista de Cards Otimizada */}
-                <div className="xl:hidden space-y-3 p-3 sm:p-4">
-                  {filteredBills.map((bill) => {
-                    const account = accounts.find(acc => acc.id === bill.account_id);
-                    const isOverdue = bill.status === "overdue";
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 p-3 sm:p-4">
+                {filteredBills.map((bill) => {
+                  const account = accounts.find(acc => acc.id === bill.account_id);
+                  const isOverdue = bill.status === "overdue";
+                    
+                  return (
+                    <div 
+                      key={bill.id} 
+                      className={cn(
+                        "apple-card p-3 sm:p-4 rounded-lg border-2 transition-all duration-200 flex flex-col",
+                        isOverdue 
+                          ? "border-destructive/30 bg-destructive/5 shadow-sm" 
+                          : "border-border/50 hover:border-primary/20 hover:shadow-md"
+                      )}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                          <div 
+                            className="w-3 h-3 sm:w-4 sm:h-4 rounded-full flex-shrink-0" 
+                            style={{ backgroundColor: account?.color || "#6b7280" }}
+                          />
+                          <div className="min-w-0">
+                            <h4 className="text-financial-button truncate">{account?.name}</h4>
+                            <p className="text-financial-caption text-muted-foreground">{bill.billing_cycle}</p>
+                          </div>
+                        </div>
+                        {getStatusBadge(bill.status)}
+                      </div>
                       
-                    return (
-                      <div 
-                        key={bill.id} 
-                        className={cn(
-                          "apple-card p-3 sm:p-4 rounded-lg border-2 transition-all duration-200",
-                          isOverdue 
-                            ? "border-destructive/30 bg-destructive/5 shadow-sm" 
-                            : "border-border/50 hover:border-primary/20 hover:shadow-md"
+                      <div className="grid grid-cols-2 gap-3 mb-4 flex-grow">
+                        <div>
+                          <p className="text-financial-caption text-muted-foreground mb-1">Vencimento</p>
+                          <p className="text-financial-body font-medium">{formatDate(bill.due_date)}</p>
+                        </div>
+                        <div>
+                          <p className="text-financial-caption text-muted-foreground mb-1">Total</p>
+                          <p className="text-financial-value text-sm font-bold">{formatCurrency(bill.total_amount)}</p>
+                        </div>
+                        {bill.paid_amount > 0 && bill.status === "partial" && (
+                          <div className="col-span-2">
+                            <p className="text-financial-caption text-muted-foreground mb-1">Pago</p>
+                            <p className="text-financial-body text-success font-medium">{formatCurrency(bill.paid_amount)}</p>
+                          </div>
                         )}
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                            <div 
-                              className="w-3 h-3 sm:w-4 sm:h-4 rounded-full flex-shrink-0" 
-                              style={{ backgroundColor: account?.color || "#6b7280" }}
-                            />
-                            <div className="min-w-0">
-                              <h4 className="text-financial-button truncate">{account?.name}</h4>
-                              <p className="text-financial-caption text-muted-foreground">{bill.billing_cycle}</p>
-                            </div>
-                          </div>
-                          {getStatusBadge(bill.status)}
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-3 mb-4">
-                          <div>
-                            <p className="text-financial-caption text-muted-foreground mb-1">Vencimento</p>
-                            <p className="text-financial-body font-medium">{formatDate(bill.due_date)}</p>
-                          </div>
-                          <div>
-                            <p className="text-financial-caption text-muted-foreground mb-1">Total</p>
-                            <p className="text-financial-value text-sm font-bold">{formatCurrency(bill.total_amount)}</p>
-                          </div>
-                          {bill.paid_amount > 0 && bill.status === "partial" && (
-                            <>
-                              <div className="col-span-2">
-                                <p className="text-financial-caption text-muted-foreground mb-1">Pago</p>
-                                <p className="text-financial-body text-success font-medium">{formatCurrency(bill.paid_amount)}</p>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                        
-                        <div className="flex gap-2">
+                      </div>
+                      
+                      <div className="flex gap-2 mt-auto">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            setSelectedBill(bill);
+                            setDetailsModalOpen(true);
+                          }}
+                          className="flex-1 h-8 text-xs"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          Ver
+                        </Button>
+                        {bill.status !== "paid" && (
                           <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => {
-                              setSelectedBill(bill);
-                              setDetailsModalOpen(true);
-                            }}
+                            size="sm" 
+                            onClick={() => handlePayBill(bill)}
                             className="flex-1 h-8 text-xs"
                           >
-                            <Eye className="h-3 w-3 mr-1" />
-                            Ver
+                            <DollarSign className="h-3 w-3 mr-1" />
+                            Pagar
                           </Button>
-                          {bill.status !== "paid" && (
-                            <Button 
-                              size="sm" 
-                              onClick={() => handlePayBill(bill)}
-                              className="flex-1 h-8 text-xs"
-                            >
-                              <DollarSign className="h-3 w-3 mr-1" />
-                              Pagar
-                            </Button>
-                          )}
-                        </div>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-
-                {/* Desktop: Tabela Otimizada */}
-                <div className="hidden xl:block overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-b border-border/50">
-                        <TableHead className="w-[180px] text-financial-caption">Cartão</TableHead>
-                        <TableHead className="w-[90px] text-financial-caption">Período</TableHead>
-                        <TableHead className="w-[110px] text-financial-caption">Vencimento</TableHead>
-                        <TableHead className="w-[130px] text-financial-caption">Total</TableHead>
-                        <TableHead className="w-[100px] text-financial-caption">Status</TableHead>
-                        <TableHead className="w-[120px] text-right text-financial-caption">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredBills.map((bill) => {
-                        const account = accounts.find(acc => acc.id === bill.account_id);
-                        const isOverdue = bill.status === "overdue";
-                        
-                        return (
-                          <TableRow 
-                            key={bill.id} 
-                            className={cn(
-                              "hover:bg-muted/30 transition-colors",
-                              isOverdue && "bg-destructive/5 hover:bg-destructive/10"
-                            )}
-                          >
-                            <TableCell className="py-3">
-                              <div className="flex items-center gap-3">
-                                <div 
-                                  className="w-3 h-3 rounded-full flex-shrink-0" 
-                                  style={{ backgroundColor: account?.color || "#6b7280" }}
-                                />
-                                <span className="text-financial-body font-medium truncate">{account?.name}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="font-mono text-financial-body py-3">{bill.billing_cycle}</TableCell>
-                            <TableCell className="text-financial-body py-3">{formatDate(bill.due_date)}</TableCell>
-                            <TableCell className="py-3">
-                              <div className="text-financial-value text-sm font-semibold">{formatCurrency(bill.total_amount)}</div>
-                              {bill.paid_amount > 0 && bill.status === "partial" && (
-                                <div className="text-xs text-success font-medium">
-                                  Pago: {formatCurrency(bill.paid_amount)}
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell className="py-3">{getStatusBadge(bill.status)}</TableCell>
-                            <TableCell className="text-right py-3">
-                              <div className="flex justify-end gap-1">
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedBill(bill);
-                                    setDetailsModalOpen(true);
-                                  }}
-                                  className="h-7 w-7 p-0"
-                                >
-                                  <Eye className="h-3 w-3" />
-                                </Button>
-                                {bill.status !== "paid" && (
-                                  <Button 
-                                    size="sm" 
-                                    onClick={() => handlePayBill(bill)}
-                                    className="h-7 w-7 p-0"
-                                  >
-                                    <DollarSign className="h-3 w-3" />
-                                  </Button>
-                                )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -869,7 +787,16 @@ export function CreditBillsPage() {
           onOpenChange={setPaymentModalOpen}
           onPayment={handlePayment}
           accounts={accounts}
-          creditAccount={accounts.find(acc => acc.id === selectedBill.account_id) || null}
+          creditAccount={selectedBill ? accounts.find(acc => acc.id === selectedBill.account_id) : null}
+          invoiceValueInCents={selectedBill?.total_amount}
+          nextInvoiceValueInCents={
+            creditBills.find(b => {
+              const nextMonth = addMonths(selectedBill.closing_date, 1);
+              return b.account_id === selectedBill.account_id &&
+                     b.closing_date.getMonth() === nextMonth.getMonth() &&
+                     b.closing_date.getFullYear() === nextMonth.getFullYear();
+            })?.total_amount || 0
+          }
         />
       )}
 
