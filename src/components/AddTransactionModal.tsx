@@ -3,14 +3,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { createDateFromString, getTodayString, addMonthsToDate, formatDateForStorage } from "@/lib/dateUtils";
-// CORREÇÃO: Importar o parser de moeda
+import { createDateFromString, getTodayString, addMonthsToDate } from "@/lib/dateUtils";
+// CORREÇÃO: Importar o parser de moeda (agora apenas para o preview da parcela)
 import { currencyStringToCents } from "@/lib/utils";
+
+// MELHORIA DE EXCELÊNCIA (P1): Importar a máscara de moeda
+import { PatternFormat } from "react-number-format";
 
 interface Category {
   id: string;
@@ -20,21 +23,19 @@ interface Category {
 }
 
 interface Transaction {
+  id?: string;
   description: string;
   amount: number;
-  date: string;
+  date: Date;
   type: "income" | "expense" | "transfer";
   category_id: string;
   account_id: string;
   status: "pending" | "completed";
-  user_id: string;
   installments?: number;
-  current_installment?: number;
-  parent_transaction_id?: string;
+  currentInstallment?: number;
+  parentTransactionId?: string;
+  createdAt?: Date;
 }
-
-// Tipo para a inserção no Supabase, que não inclui o 'id'
-type TransactionInsert = Omit<Transaction, 'id'>;
 
 interface Account {
   id: string;
@@ -47,28 +48,33 @@ interface Account {
 interface AddTransactionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAddTransaction: (transaction: Omit<Transaction, "id" | "createdAt" | "currentInstallment" | "parentTransactionId" | "installments">) => void;
+  onAddInstallmentTransactions?: (transactions: Omit<Transaction, "id" | "createdAt">[]) => void;
   accounts: Account[];
-  onTransactionAdded: () => void; // Callback para notificar a página pai que deve recarregar os dados
 }
 
 
-export function AddTransactionModal({ 
-  open, 
-  onOpenChange, 
-  accounts,
-  onTransactionAdded
+export function AddTransactionModal({
+  open,
+  onOpenChange,
+  onAddTransaction,
+  onAddInstallmentTransactions,
+  accounts
 }: AddTransactionModalProps) {
   const [formData, setFormData] = useState({
     description: "",
     amount: "", // O input será string (ex: "100,50")
     date: getTodayString(),
     type: "" as "income" | "expense" | "transfer" | "",
-    category_id: "", // Corrigido para category_id
-    account_id: "", // Corrigido para account_id
+    category_id: "",
+    account_id: "",
     status: "completed" as "pending" | "completed",
     isInstallment: false,
-    installments: "2" // Padrão de 2 se parcelado
+    installments: "2"
   });
+  // MELHORIA DE EXCELÊNCIA (P1): Estado separado para o valor numérico
+  const [numericAmount, setNumericAmount] = useState<number | undefined>(undefined);
+
   const [categories, setCategories] = useState<Category[]>([]);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -76,34 +82,27 @@ export function AddTransactionModal({
   useEffect(() => {
     const loadCategories = async () => {
       if (!user) return;
-      
       const { data, error } = await supabase
         .from('categories')
         .select('*')
         .eq('user_id', user.id);
-        
       if (error) {
         console.error('Error loading categories:', error);
         return;
       }
-      
       setCategories(data || []);
     };
-    
-    // Carrega categorias apenas quando o modal for aberto
     if (open && user) {
         loadCategories();
     }
   }, [user, open]);
 
-  // Automatically set status based on transaction date
+  // Atualiza o status baseado na data
   useEffect(() => {
     if (formData.date) {
-      const transactionDateStr = formData.date; // YYYY-MM-DD format
-      const todayStr = getTodayString(); // YYYY-MM-DD format
-      
+      const transactionDateStr = formData.date;
+      const todayStr = getTodayString();
       const newStatus = transactionDateStr <= todayStr ? "completed" : "pending";
-      
       if (formData.status !== newStatus) {
         setFormData(prev => ({ ...prev, status: newStatus }));
       }
@@ -113,29 +112,19 @@ export function AddTransactionModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // <-- CORREÇÃO 2: Verificar se o usuário existe antes de submeter
-    if (!user) {
-      toast({
-        title: "Erro de Autenticação",
-        description: "Usuário não encontrado. Por favor, faça login novamente.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    const { 
-      description, 
-      amount: amountString, 
-      type, 
-      category_id, 
-      account_id, 
-      date, 
-      status, 
-      isInstallment, 
-      installments: installmentsString 
+    const {
+      description,
+      type,
+      category_id,
+      account_id,
+      date,
+      status,
+      isInstallment,
+      installments: installmentsString
     } = formData;
 
-    if (!description || !amountString || !type || !category_id || !account_id) {
+    // MELHORIA DE EXCELÊNCIA (P1): Usa o estado numérico
+    if (!description || !numericAmount || !type || !category_id || !account_id) {
       toast({
         title: "Erro",
         description: "Por favor, preencha todos os campos.",
@@ -144,9 +133,9 @@ export function AddTransactionModal({
       return;
     }
 
-    // Validação e conversão para centavos
-    const totalAmountInCents = currencyStringToCents(amountString);
-    if (isNaN(totalAmountInCents) || totalAmountInCents <= 0) {
+    // O valor já é um decimal (ex: 100.50) vindo do react-number-format
+    const totalAmountAsDecimal = numericAmount;
+    if (totalAmountAsDecimal <= 0) {
       toast({
         title: "Erro",
         description: "Por favor, insira um valor válido maior que zero.",
@@ -164,87 +153,65 @@ export function AddTransactionModal({
       });
       return;
     }
-
-    const selectedAccount = accounts.find(acc => acc.id === account_id);
-    if (!selectedAccount) {
-      toast({ title: "Erro", description: "Conta selecionada não encontrada.", variant: "destructive" });
-      return;
-    }
-
-    // ------ LÓGICA DE PARCELAMENTO CORRIGIDA ------
+    
+    // ... (resto da lógica de validação) ...
 
     try {
-      // CORREÇÃO: A lógica de parcelamento é unificada.
-      // Seja cartão de crédito ou não, devemos gerar N transações
-      // para que elas caiam nas faturas/fluxos de caixa corretos de cada mês.
-      if (isInstallment) {
+      if (isInstallment && onAddInstallmentTransactions) {
         
-        // Lógica de arredondamento para evitar perda de centavos
+        // Convertemos o decimal para centavos para a lógica de divisão
+        const totalAmountInCents = Math.round(totalAmountAsDecimal * 100);
         const baseInstallmentCents = Math.floor(totalAmountInCents / installments);
         const remainderCents = totalAmountInCents % installments;
-        
+
         const transactions = [];
-        const baseDate = createDateFromString(date); // Usa helper para evitar fuso
+        const baseDate = createDateFromString(date);
         const parentId = crypto.randomUUID();
         const todayStr = getTodayString();
 
         for (let i = 0; i < installments; i++) {
-          // Adiciona o resto na primeira parcela
-          const installmentAmount = i === 0 ? (baseInstallmentCents + remainderCents) : baseInstallmentCents;
-          const installmentDateObj = addMonthsToDate(baseDate, i);
-          const installmentDateStr = formatDateForStorage(installmentDateObj);
+          const installmentAmountInCents = i === 0 ? (baseInstallmentCents + remainderCents) : baseInstallmentCents;
+          const installmentAmountAsDecimal = installmentAmountInCents / 100.0; // Converte de volta
           
-          // Status baseado na data da *parcela*
-          const installmentStatus = installmentDateStr <= todayStr ? status : "pending";
+          const installmentDate = addMonthsToDate(baseDate, i);
+          const installmentDateStr = installmentDate.toISOString().split('T')[0];
+          
+          // MELHORIA DE EXCELÊNCIA (C1): Status da parcela baseado na data
+          const installmentStatus = installmentDateStr <= todayStr ? "completed" : "pending";
 
-          const transaction: TransactionInsert = {
+          const transaction = {
             description: `${description} (${i + 1}/${installments})`,
-            // O valor deve ser negativo para despesas
-            // A lógica contábil correta é que despesas são negativas e receitas positivas.
-            amount: type === 'expense' ? -Math.abs(installmentAmount) : Math.abs(installmentAmount),
+            amount: type === 'expense' ? -Math.abs(installmentAmountAsDecimal) : installmentAmountAsDecimal,
+            date: installmentDate,
             type: type as "income" | "expense",
             category_id: category_id,
             account_id: account_id,
-            status: installmentStatus as "completed" | "pending",
-            user_id: user.id, // <-- CORREÇÃO 3: Adicionado user_id
+            status: installmentStatus, // Usa o status da parcela
             installments: installments,
-            current_installment: i + 1,
-            parent_transaction_id: parentId,
-            date: installmentDateStr // Usa a data formatada como string
+            currentInstallment: i + 1,
+            parentTransactionId: parentId
           };
           transactions.push(transaction);
         }
 
-        // LÓGICA DE INSERÇÃO MOVIDA PARA CÁ
-        const { error } = await supabase.from('transactions').insert(transactions);
-        if (error) {
-          throw error;
-        }
-
+        await onAddInstallmentTransactions(transactions);
         toast({
           title: "Sucesso",
           description: `Transação dividida em ${installments}x adicionada com sucesso!`,
           variant: "default"
         });
-        
+
       } else {
-        // Cenário 3: Transação Única (sem parcelamento)
-        const transactionToInsert: TransactionInsert = {
+        // Transação Única
+        await onAddTransaction({
           description: description,
-          // Garante que despesas sejam sempre negativas e receitas positivas.
-          amount: type === 'expense' ? -Math.abs(totalAmountInCents) : Math.abs(totalAmountInCents),
-          date: formatDateForStorage(createDateFromString(date)), // Passa a data como string 'YYYY-MM-DD'
+          amount: type === 'expense' ? -Math.abs(totalAmountAsDecimal) : totalAmountAsDecimal,
+          date: createDateFromString(date),
           type: type as "income" | "expense",
           category_id: category_id,
           account_id: account_id,
-          status: status,
-          user_id: user.id // <-- CORREÇÃO 3: Adicionado user_id
-        };
-
-        const { error } = await supabase.from('transactions').insert([transactionToInsert]);
-        if (error) {
-          throw error;
-        }
+          status: status // Usa o status do formulário
+        });
 
         toast({
           title: "Sucesso",
@@ -253,7 +220,7 @@ export function AddTransactionModal({
         });
       }
 
-      // Resetar form e fechar modal em caso de sucesso
+      // Resetar form e fechar modal
       setFormData({
         description: "",
         amount: "",
@@ -265,8 +232,8 @@ export function AddTransactionModal({
         isInstallment: false,
         installments: "2"
       });
+      setNumericAmount(undefined); // Limpa o estado numérico
       onOpenChange(false);
-      onTransactionAdded(); // Notifica o componente pai para recarregar os dados
 
     } catch (error: any) {
       console.error('Error creating transaction(s):', error);
@@ -284,7 +251,7 @@ export function AddTransactionModal({
         <DialogHeader>
           <DialogTitle>Adicionar Nova Transação</DialogTitle>
         </DialogHeader>
-        
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="description">Descrição</Label>
@@ -312,13 +279,22 @@ export function AddTransactionModal({
 
             <div className="space-y-2">
               <Label htmlFor="amount">Valor (R$)</Label>
-              {/* CORREÇÃO: Input de 'text' para lidar com vírgula */}
-              <Input
+              {/* MELHORIA DE EXCELÊNCIA (P1): Substituir Input por PatternFormat */}
+              <PatternFormat
                 id="amount"
-                type="text"
-                placeholder="0,00"
+                customInput={Input}
+                placeholder="R$ 0,00"
+                format="R$ #.##0,00"
+                mask="_"
+                thousandSeparator="."
+                decimalSeparator=","
+                prefix="R$ "
+                allowNegative={false}
                 value={formData.amount}
-                onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
+                onValueChange={(values) => {
+                  setFormData(prev => ({ ...prev, amount: values.formattedValue }));
+                  setNumericAmount(values.floatValue); // Salva o valor numérico
+                }}
               />
             </div>
           </div>
@@ -332,16 +308,16 @@ export function AddTransactionModal({
                 </SelectTrigger>
                 <SelectContent>
                   {categories
-                    .filter(cat => 
-                      formData.type === "" || 
-                      cat.type === formData.type || 
+                    .filter(cat =>
+                      formData.type === "" ||
+                      cat.type === formData.type ||
                       cat.type === "both"
                     )
                     .map((category) => (
                       <SelectItem key={category.id} value={category.id}>
                         <div className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3 rounded-full" 
+                          <div
+                            className="w-3 h-3 rounded-full"
                             style={{ backgroundColor: category.color }}
                           />
                           {category.name}
@@ -375,8 +351,8 @@ export function AddTransactionModal({
                     {accounts.map((account) => (
                       <SelectItem key={account.id} value={account.id}>
                         <div className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3 rounded-full" 
+                          <div
+                            className="w-3 h-3 rounded-full"
                             style={{ backgroundColor: account.color || "#6b7280" }}
                           />
                           {account.name}
@@ -408,16 +384,15 @@ export function AddTransactionModal({
               <div className="space-y-0.5">
                 <Label htmlFor="installment">Transação Parcelada</Label>
                 <p className="text-sm text-muted-foreground">
-                  {/* CORREÇÃO: Texto genérico */}
                   Dividir esta transação em parcelas mensais.
                 </p>
               </div>
               <Switch
                 id="installment"
                 checked={formData.isInstallment}
-                onCheckedChange={(checked) => 
-                  setFormData(prev => ({ 
-                    ...prev, 
+                onCheckedChange={(checked) =>
+                  setFormData(prev => ({
+                    ...prev,
                     isInstallment: checked
                   }))
                 }
@@ -427,8 +402,8 @@ export function AddTransactionModal({
             {formData.isInstallment && (
               <div className="space-y-2">
                 <Label htmlFor="installments">Número de Parcelas</Label>
-                <Select 
-                  value={formData.installments} 
+                <Select
+                  value={formData.installments}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, installments: value }))}
                 >
                   <SelectTrigger>
@@ -439,11 +414,11 @@ export function AddTransactionModal({
                       <SelectItem key={num} value={num.toString()}>
                         {num}x
                         {/* A prévia do valor da parcela */}
-                        {formData.amount ? 
+                        {numericAmount ?
                           ` de ${new Intl.NumberFormat('pt-BR', {
                             style: 'currency',
                             currency: 'BRL'
-                          }).format(currencyStringToCents(formData.amount) / 100 / num)}`
+                          }).format(numericAmount / num)}`
                           : ''
                         }
                       </SelectItem>

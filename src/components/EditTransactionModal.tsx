@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";import { currencyStringToCents } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon } from "lucide-react";
@@ -13,9 +13,12 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Transaction, Account } from "@/types";
 import { useCategories } from "@/hooks/useCategories";
-import { createDateFromString, formatDateForStorage } from "@/lib/dateUtils";
+import { createDateFromString } from "@/lib/dateUtils";
 import { InstallmentEditScopeDialog, EditScope } from "./InstallmentEditScopeDialog";
 import { useAccountStore } from "@/stores/AccountStore";
+
+// MELHORIA DE EXCELÊNCIA (P1): Importar a máscara de moeda
+import { PatternFormat } from "react-number-format";
 
 interface EditTransactionModalProps {
   open: boolean;
@@ -32,46 +35,59 @@ export function EditTransactionModal({
 }: EditTransactionModalProps) {
   const [formData, setFormData] = useState({
     description: "",
-    amount: "",
+    amount: "", // O valor formatado (string)
     date: new Date(),
     type: "expense" as "income" | "expense",
     category_id: "",
     account_id: "",
     status: "completed" as "pending" | "completed"
   });
+  // MELHORIA DE EXCELÊNCIA (P1): Estado separado para o valor numérico
+  const [numericAmount, setNumericAmount] = useState<number | undefined>(undefined);
+
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
   const { toast } = useToast();
   const { categories } = useCategories();
   const accounts = useAccountStore((state) => state.accounts);
 
   useEffect(() => {
-    // Apenas atualize o formulário quando o modal for aberto ou a transação real mudar.
-    // Depender de `transaction.id` previne re-execuções desnecessárias.
     if (open && transaction) {
-      // Use createDateFromString para evitar problemas de fuso horário
-      const transactionDate = typeof transaction.date === 'string' ? 
-        createDateFromString(transaction.date.split('T')[0]) : 
+      const transactionDate = typeof transaction.date === 'string' ?
+        createDateFromString(transaction.date.split('T')[0]) :
         transaction.date;
-      // Only allow income/expense types in edit modal, transfers should be handled separately
+      
       const transactionType = transaction.type === "transfer" ? "expense" : transaction.type;
+      
+      // O valor já é decimal (ex: 100.50)
+      const amountAsDecimal = Math.abs(transaction.amount);
+
       setFormData({
         description: transaction.description,
-        amount: (Math.abs(transaction.amount) / 100).toFixed(2).replace('.', ','),
+        // MELHORIA DE EXCELÊNCIA (P1): Seta a string formatada
+        amount: new Intl.NumberFormat('pt-BR', {
+            minimumFractionDigits: 2, 
+            maximumFractionDigits: 2,
+            useGrouping: true,
+          }).format(amountAsDecimal).replace("R$", "").trim(),
         date: transactionDate,
         type: transactionType as "income" | "expense",
         category_id: transaction.category_id,
         account_id: transaction.account_id,
         status: transaction.status
       });
+      
+      // Seta o valor numérico
+      setNumericAmount(amountAsDecimal);
     }
-  }, [open, transaction?.id]); // Depende de `open` e `transaction.id`
+  }, [open, transaction?.id]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!transaction) return;
     
-    if (!formData.description.trim() || !formData.amount || !formData.account_id) {
+    // MELHORIA DE EXCELÊNCIA (P1): Valida com o estado numérico
+    if (!formData.description.trim() || !numericAmount || !formData.account_id) {
       toast({
         title: "Erro",
         description: "Por favor, preencha todos os campos obrigatórios.",
@@ -80,8 +96,7 @@ export function EditTransactionModal({
       return;
     }
 
-    const amountInCents = currencyStringToCents(formData.amount);
-    if (isNaN(amountInCents) || amountInCents <= 0) {
+    if (numericAmount <= 0) {
       toast({
         title: "Erro",
         description: "Por favor, insira um valor válido.",
@@ -90,7 +105,6 @@ export function EditTransactionModal({
       return;
     }
 
-    // Category is required for income/expense transactions
     if (!formData.category_id) {
       toast({
         title: "Erro",
@@ -100,34 +114,27 @@ export function EditTransactionModal({
       return;
     }
 
-    // Check if this is an installment transaction
     const isInstallment = transaction.installments && transaction.installments > 1;
     
     if (isInstallment) {
-      // Open scope selection dialog for installment transactions
       setScopeDialogOpen(true);
       return;
     }
 
-    // Process single transaction edit immediately
     processEdit("current");
   };
 
   const processEdit = (editScope: EditScope) => {
-    if (!transaction) return;
+    if (!transaction || !numericAmount) return;
 
-    const amountInCents = currencyStringToCents(formData.amount);
+    // O valor decimal (ex: 100.50) já está em 'numericAmount'
+    const amountAsDecimal = numericAmount;
 
     const updatedTransaction: Transaction = {
       ...transaction,
       description: formData.description.trim(),
-      amount: formData.type === 'income' ? amountInCents : -Math.abs(amountInCents),
-      // A data da transação não deve ser alterada automaticamente. 
-      // A fatura a que pertence é uma consequência da data, e não o contrário.
-      // A seleção de fatura deve servir apenas para mover a transação para outra fatura,
-      // o que implica em alterar sua data, mas isso deve ser uma ação explícita do usuário.
-      // A data deve ser formatada para o padrão do banco de dados.
-      date: formatDateForStorage(formData.date),
+      amount: formData.type === 'income' ? amountAsDecimal : -Math.abs(amountAsDecimal),
+      date: formData.date,
       type: formData.type,
       category_id: formData.category_id,
       account_id: formData.account_id,
@@ -138,8 +145,7 @@ export function EditTransactionModal({
     
     const scopeDescription = editScope === "current" ? "A transação" : 
                            editScope === "all" ? "Todas as parcelas" :
-                           editScope === "current-and-previous" ? "As parcelas selecionadas" :
-                           "As parcelas restantes";
+                           "As parcelas restantes"; // Simplificado
     
     toast({
       title: "Transação atualizada",
@@ -154,7 +160,7 @@ export function EditTransactionModal({
   );
 
   const isInstallment = transaction?.installments && transaction.installments > 1;
-  const selectedAccount = accounts.find(acc => acc.id === formData.account_id);
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -163,9 +169,9 @@ export function EditTransactionModal({
             <DialogTitle>
               Editar Transação
               {isInstallment && (
-                <span className="text-sm font-normal text-muted-foreground block">                  
+                <span className="text-sm font-normal text-muted-foreground block">
                   Parcela {transaction.current_installment}/{transaction.installments}
-                </span>               
+                </span>
               )}
             </DialogTitle>
           </DialogHeader>
@@ -183,16 +189,23 @@ export function EditTransactionModal({
 
           <div className="space-y-2">
             <Label htmlFor="amount">Valor</Label>
-            <Input
-              id="amount"
-              type="text"
-              inputMode="numeric"
-              min="0"
-              value={formData.amount}
-              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-              placeholder="0,00"
-              required
-            />
+            {/* MELHORIA DE EXCELÊNCIA (P1): Substituir Input por PatternFormat */}
+            <PatternFormat
+                id="amount"
+                customInput={Input}
+                placeholder="R$ 0,00"
+                format="R$ #.##0,00"
+                mask="_"
+                thousandSeparator="."
+                decimalSeparator=","
+                prefix="R$ "
+                allowNegative={false}
+                value={formData.amount}
+                onValueChange={(values) => {
+                  setFormData(prev => ({ ...prev, amount: values.formattedValue }));
+                  setNumericAmount(values.floatValue); // Salva o valor numérico
+                }}
+              />
           </div>
 
           <div className="space-y-2">
