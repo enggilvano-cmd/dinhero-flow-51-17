@@ -27,18 +27,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select'
-import { Input } from './ui/input'
+// Input não é mais usado diretamente para valor
+// import { Input } from './ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { cn } from '@/lib/utils'
 import { CalendarIcon } from 'lucide-react'
 import { Calendar } from './ui/calendar'
-import { format } from 'date-fns' // Importa o formatador de data
+import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Account, CreditBill } from '@/integrations/supabase/types'
 import { useAccountStore } from '@/stores/AccountStore'
 import { toast } from 'sonner'
-import { parseCurrencyToCents } from '@/lib/formatters' // Importa o parser de centavos
+// parseCurrencyToCents NÃO é mais necessário
+// import { parseCurrencyToCents } from '@/lib/formatters'
 import { supabase } from '@/integrations/supabase/client'
+import { CurrencyInput } from './forms/CurrencyInput' // Importar o novo componente
 
 interface CreditPaymentModalProps {
   creditAccount: Account
@@ -46,10 +49,13 @@ interface CreditPaymentModalProps {
   onPaymentSuccess: () => void
 }
 
-// Schema de validação do Zod
+// Schema de validação do Zod (CORRIGIDO)
 const formSchema = z.object({
   accountId: z.string().uuid('Deve ser um ID de conta válido.'),
-  amount: z.string().min(1, 'O valor é obrigatório.'),
+  // CORREÇÃO: 'amount' agora é um NÚMERO (centavos)
+  amount: z
+    .number({ required_error: 'O valor é obrigatório.' })
+    .min(1, 'O valor deve ser maior que R$ 0,00'),
   date: z.date({ required_error: 'A data é obrigatória.' }),
 })
 
@@ -70,20 +76,20 @@ export const CreditPaymentModal: React.FC<CreditPaymentModalProps> = ({
     resolver: zodResolver(formSchema),
     defaultValues: {
       accountId: undefined,
-      // NOTA: O valor aqui é uma string formatada para o input.
-      // A conversão para centavos acontece no onSubmit.
-      amount: (Math.abs(bill.total_amount) / 100).toFixed(2).replace('.', ','),
+      // CORREÇÃO: O valor default é em CENTAVOS
+      // bill.total_amount já vem em centavos (ex: -15000)
+      amount: Math.abs(bill.total_amount),
       date: new Date(),
     },
   })
 
-  // Função chamada no submit do formulário
+  // Função chamada no submit do formulário (CORRIGIDA)
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       //
       // === NOTA 10/10 DE CORREÇÃO ===
-      // 1. Converte a string de moeda (ex: "150,50") para centavos (ex: 15050)
-      const amountInCents = parseCurrencyToCents(values.amount)
+      // 1. 'values.amount' JÁ VEM EM CENTAVOS (ex: 15050)
+      const amountInCents = values.amount
 
       // 2. Converte o objeto Date para a string 'YYYY-MM-DD'
       const dateString = format(values.date, 'yyyy-MM-dd')
@@ -95,10 +101,11 @@ export const CreditPaymentModal: React.FC<CreditPaymentModalProps> = ({
         account_id: values.accountId,
         description: `Pagamento Fatura ${creditAccount.name}`,
         // Pagamento é uma despesa (negativo)
-        amount: -Math.abs(amountInCents),
+        amount: -Math.abs(amountInCents), // JÁ ESTÁ EM CENTAVOS
         date: dateString,
         category_id: null,
         include_in_reports: false, // Pagamento de fatura não conta em relatórios
+        is_paid: true, // Pagamento de fatura é sempre 'pago'
       })
 
       if (paymentError) throw paymentError
@@ -108,10 +115,11 @@ export const CreditPaymentModal: React.FC<CreditPaymentModalProps> = ({
         account_id: creditAccount.id,
         description: `Pagamento Recebido`,
         // Pagamento é uma receita (positivo) no cartão
-        amount: Math.abs(amountInCents),
+        amount: Math.abs(amountInCents), // JÁ ESTÁ EM CENTAVOS
         date: dateString,
         category_id: null,
         include_in_reports: false,
+        is_paid: true,
       })
 
       if (creditError) throw creditError
@@ -169,19 +177,17 @@ export const CreditPaymentModal: React.FC<CreditPaymentModalProps> = ({
               )}
             />
 
-            {/* Campo: Valor */}
+            {/* Campo: Valor (CORRIGIDO) */}
             <FormField
               control={form.control}
               name="amount"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Valor do Pagamento</FormLabel>
-                  <FormControl>
-                    {/* Idealmente, este seria um Input de Moeda mascarado */}
-                    <Input placeholder="R$ 0,00" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+                <CurrencyInput
+                  name="amount"
+                  label="Valor do Pagamento"
+                  placeholder="R$ 0,00"
+                  field={field}
+                />
               )}
             />
 

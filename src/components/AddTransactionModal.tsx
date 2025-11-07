@@ -33,18 +33,23 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { cn } from '@/lib/utils'
 import { CalendarIcon } from 'lucide-react'
 import { Calendar } from './ui/calendar'
-import { format } from 'date-fns' // Importa o formatador de data
+import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { useAccountStore } from '@/stores/AccountStore' // Importa o store unificado
-import { parseCurrencyToCents } from '@/lib/formatters' // Importa o parser de centavos
+import { useAccountStore } from '@/stores/AccountStore'
+// parseCurrencyToCents NÃO é mais necessário
+// import { parseCurrencyToCents } from '@/lib/formatters'
 import { Switch } from './ui/switch'
 import { Label } from './ui/label'
+import { CurrencyInput } from './forms/CurrencyInput' // Importar o novo componente
 
-// Schema de validação do Zod
+// Schema de validação do Zod (CORRIGIDO)
 const formSchema = z.object({
   type: z.enum(['expense', 'income']),
   description: z.string().min(1, 'A descrição é obrigatória.'),
-  amount: z.string().min(1, 'O valor é obrigatório.'),
+  // CORREÇÃO: 'amount' agora é um NÚMERO (centavos)
+  amount: z
+    .number({ required_error: 'O valor é obrigatório.' })
+    .min(1, 'O valor deve ser maior que R$ 0,00'),
   date: z.date({ required_error: 'A data é obrigatória.' }),
   accountId: z.string().uuid('A conta é obrigatória.'),
   categoryId: z.string().uuid().nullable(),
@@ -54,12 +59,6 @@ const formSchema = z.object({
 export const AddTransactionModal: React.FC = () => {
   const [isOpen, setIsOpen] = React.useState(false)
 
-  //
-  // === CORREÇÃO DE LÓGICA ===
-  //
-  // Antes, usava `useAccountStore` e `useAccountActions` separados.
-  // Agora, pegamos tudo (dados e ações) do hook unificado.
-  //
   const {
     accounts,
     categories,
@@ -72,7 +71,7 @@ export const AddTransactionModal: React.FC = () => {
     defaultValues: {
       type: 'expense',
       description: '',
-      amount: '',
+      amount: undefined, // CORREÇÃO: Default para input de número
       date: new Date(),
       accountId: undefined,
       categoryId: null,
@@ -86,13 +85,14 @@ export const AddTransactionModal: React.FC = () => {
     return categories.filter((c) => c.type === transactionType)
   }, [categories, transactionType])
 
-  // Função chamada no submit do formulário
+  // Função chamada no submit do formulário (CORRIGIDA)
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     //
-    // === NOTA 10/10 DE CORREÇÃO (CONTADOR/PROGRAMADOR) ===
+    // === NOTA 10/10 DE CORREÇÃO ===
     //
-    // 1. Converte a string de moeda (ex: "150,50") para centavos (ex: 15050)
-    let amountInCents = parseCurrencyToCents(values.amount)
+    // 1. 'values.amount' JÁ VEM EM CENTAVOS (ex: 15050)
+    //    Não é mais necessário usar 'parseCurrencyToCents'
+    let amountInCents = values.amount
 
     // 2. Garante que a despesa seja negativa e a receita positiva
     if (values.type === 'expense') {
@@ -109,19 +109,16 @@ export const AddTransactionModal: React.FC = () => {
     await createTransaction(
       {
         description: values.description,
-        amount: amountInCents,
+        amount: amountInCents, // JÁ ESTÁ EM CENTAVOS
         date: dateString,
         account_id: values.accountId,
         category_id: values.categoryId,
         is_paid: values.isPaid,
-        // (Outros campos como 'transfer_id' são nulos por padrão)
       },
       () => {
         // Callback de sucesso
         setIsOpen(false)
         form.reset()
-        // `createTransaction` já recarrega as contas, mas podemos garantir
-        // loadAccounts()
       }
     )
   }
@@ -180,19 +177,17 @@ export const AddTransactionModal: React.FC = () => {
               )}
             />
 
-            {/* Campo: Valor */}
+            {/* Campo: Valor (CORRIGIDO) */}
             <FormField
               control={form.control}
               name="amount"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Valor</FormLabel>
-                  <FormControl>
-                    {/* Idealmente, usar um input de máscara de moeda */}
-                    <Input placeholder="R$ 0,00" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+                <CurrencyInput
+                  name="amount"
+                  label="Valor"
+                  placeholder="R$ 0,00"
+                  field={field}
+                />
               )}
             />
 

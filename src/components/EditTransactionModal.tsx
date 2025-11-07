@@ -11,7 +11,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Transaction, Account } from "@/types";
+import { Transaction, Account } from "@/types"; // 'Account' não está sendo usado, pode remover se quiser
 import { useCategories } from "@/hooks/useCategories";
 import { createDateFromString } from "@/lib/dateUtils";
 import { InstallmentEditScopeDialog, EditScope } from "./InstallmentEditScopeDialog";
@@ -27,23 +27,36 @@ interface EditTransactionModalProps {
   transaction: Transaction | null;
 }
 
+// CORREÇÃO: 'amount' no formData agora armazena NÚMERO (centavos)
+type FormData = {
+  description: string;
+  amount: number | undefined; // Armazena centavos (ex: 10050)
+  date: Date;
+  type: "income" | "expense";
+  category_id: string;
+  account_id: string;
+  // CORREÇÃO: O schema do DB usa 'is_paid' (boolean)
+  is_paid: boolean;
+};
+
 export function EditTransactionModal({
   open,
   onOpenChange,
   onEditTransaction,
   transaction
 }: EditTransactionModalProps) {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     description: "",
-    amount: "", // O valor formatado (string)
+    amount: undefined, // Armazena centavos (ex: 10050)
     date: new Date(),
     type: "expense" as "income" | "expense",
     category_id: "",
     account_id: "",
-    status: "completed" as "pending" | "completed"
+    is_paid: true,
   });
-  // MELHORIA DE EXCELÊNCIA (P1): Estado separado para o valor numérico
-  const [numericAmount, setNumericAmount] = useState<number | undefined>(undefined);
+
+  // REMOVIDO: O estado 'numericAmount' é redundante. 'formData.amount' guardará os centavos.
+  // const [numericAmount, setNumericAmount] = useState<number | undefined>(undefined);
 
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
   const { toast } = useToast();
@@ -58,36 +71,30 @@ export function EditTransactionModal({
       
       const transactionType = transaction.type === "transfer" ? "expense" : transaction.type;
       
-      // O valor já é decimal (ex: 100.50)
-      const amountAsDecimal = Math.abs(transaction.amount);
+      // CORREÇÃO: O valor já é BIGINT (centavos, ex: 10050)
+      const amountInCents = Math.abs(transaction.amount);
 
       setFormData({
         description: transaction.description,
-        // MELHORIA DE EXCELÊNCIA (P1): Seta a string formatada
-        amount: new Intl.NumberFormat('pt-BR', {
-            minimumFractionDigits: 2, 
-            maximumFractionDigits: 2,
-            useGrouping: true,
-          }).format(amountAsDecimal).replace("R$", "").trim(),
+        amount: amountInCents, // Armazena o NÚMERO de centavos
         date: transactionDate,
         type: transactionType as "income" | "expense",
         category_id: transaction.category_id,
         account_id: transaction.account_id,
-        status: transaction.status
+        // CORREÇÃO: 'status' é 'is_paid' no schema
+        is_paid: transaction.is_paid
       });
       
-      // Seta o valor numérico
-      setNumericAmount(amountAsDecimal);
     }
-  }, [open, transaction?.id]);
+  }, [open, transaction]); // Removido transaction?.id da dependência, 'transaction' é suficiente
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!transaction) return;
     
-    // MELHORIA DE EXCELÊNCIA (P1): Valida com o estado numérico
-    if (!formData.description.trim() || !numericAmount || !formData.account_id) {
+    // CORREÇÃO: Valida com o formData.amount (número de centavos)
+    if (!formData.description.trim() || !formData.amount || !formData.account_id) {
       toast({
         title: "Erro",
         description: "Por favor, preencha todos os campos obrigatórios.",
@@ -96,7 +103,7 @@ export function EditTransactionModal({
       return;
     }
 
-    if (numericAmount <= 0) {
+    if (formData.amount <= 0) {
       toast({
         title: "Erro",
         description: "Por favor, insira um valor válido.",
@@ -125,27 +132,29 @@ export function EditTransactionModal({
   };
 
   const processEdit = (editScope: EditScope) => {
-    if (!transaction || !numericAmount) return;
+    if (!transaction || !formData.amount) return;
 
-    // O valor decimal (ex: 100.50) já está em 'numericAmount'
-    const amountAsDecimal = numericAmount;
+    // CORREÇÃO: O valor em centavos (ex: 10050) já está em 'formData.amount'
+    const amountInCents = formData.amount;
 
     const updatedTransaction: Transaction = {
       ...transaction,
       description: formData.description.trim(),
-      amount: formData.type === 'income' ? amountAsDecimal : -Math.abs(amountAsDecimal),
-      date: formData.date,
+      amount: formData.type === 'income' ? amountInCents : -Math.abs(amountInCents),
+      date: formData.date, // O 'onEditTransaction' deve formatar para 'YYYY-MM-DD' se necessário
       type: formData.type,
       category_id: formData.category_id,
       account_id: formData.account_id,
-      status: formData.status
+      // CORREÇÃO: 'status' é 'is_paid'
+      is_paid: formData.is_paid,
+      status: formData.is_paid ? 'completed' : 'pending', // Mantém compatibilidade com 'status' se a 'Transaction' type o tiver
     };
 
     onEditTransaction(updatedTransaction, editScope);
     
     const scopeDescription = editScope === "current" ? "A transação" : 
                            editScope === "all" ? "Todas as parcelas" :
-                           "As parcelas restantes"; // Simplificado
+                           "As parcelas restantes";
     
     toast({
       title: "Transação atualizada",
@@ -189,21 +198,23 @@ export function EditTransactionModal({
 
           <div className="space-y-2">
             <Label htmlFor="amount">Valor</Label>
-            {/* MELHORIA DE EXCELÊNCIA (P1): Substituir Input por PatternFormat */}
+            {/* CORREÇÃO: Ligar o PatternFormat ao estado 'formData.amount' (centavos) */}
             <PatternFormat
                 id="amount"
                 customInput={Input}
                 placeholder="R$ 0,00"
-                format="R$ #.##0,00"
+                format="R$ #,##0.00"
                 mask="_"
                 thousandSeparator="."
                 decimalSeparator=","
                 prefix="R$ "
                 allowNegative={false}
-                value={formData.amount}
+                // O valor exibido é os centavos / 100
+                value={typeof formData.amount === 'number' ? formData.amount / 100 : undefined}
                 onValueChange={(values) => {
-                  setFormData(prev => ({ ...prev, amount: values.formattedValue }));
-                  setNumericAmount(values.floatValue); // Salva o valor numérico
+                  // Salva os centavos (int) de volta no estado
+                  const centsValue = Math.round(Number(values.floatValue) * 100)
+                  setFormData(prev => ({ ...prev, amount: centsValue }));
                 }}
               />
           </div>
@@ -233,6 +244,7 @@ export function EditTransactionModal({
                   selected={formData.date}
                   onSelect={(date) => date && setFormData({ ...formData, date })}
                   initialFocus
+                  locale={ptBR}
                 />
               </PopoverContent>
             </Popover>
@@ -306,18 +318,21 @@ export function EditTransactionModal({
             </Select>
           </div>
 
+          {/* CORREÇÃO: Alterado de 'Status' para 'Pago' (is_paid) */}
           <div className="space-y-2">
-            <Label htmlFor="status">Status</Label>
+            <Label htmlFor="is_paid">Status</Label>
             <Select
-              value={formData.status}
-              onValueChange={(value: "pending" | "completed") => setFormData({ ...formData, status: value })}
+              value={formData.is_paid ? "paid" : "pending"}
+              onValueChange={(value: "paid" | "pending") => 
+                setFormData({ ...formData, is_paid: value === "paid" })
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pending">Pendente</SelectItem>
-                <SelectItem value="completed">Concluída</SelectItem>
+                <SelectItem value="paid">Pago</SelectItem>
               </SelectContent>
             </Select>
           </div>
